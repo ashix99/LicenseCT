@@ -447,7 +447,7 @@ class ActivationBotApp:
         )
 
     def _normalize_activation_code(self, value: str) -> str:
-        return value.strip().upper()
+        return value or ""
 
     def _is_valid_activation_code(self, value: str) -> bool:
         raw_value = value or ""
@@ -569,7 +569,8 @@ class ActivationBotApp:
         await self._send_main_menu(user_id, responder=event.respond)
 
     async def handle_message(self, event: Any) -> None:
-        text = (event.raw_text or "").strip()
+        raw_text = event.raw_text or ""
+        text = raw_text.strip()
         if not text or text == "/start":
             return
 
@@ -628,11 +629,11 @@ class ActivationBotApp:
             return
 
         if state["state"] == "waiting_activation_code":
-            await self.handle_activation_code_input(event, text)
+            await self.handle_activation_code_input(event, raw_text)
             return
 
         if state["state"] == "waiting_session_fragments":
-            await self.handle_session_fragment(event, text)
+            await self.handle_session_fragment(event, raw_text)
             return
 
         if state["state"] == "processing_order":

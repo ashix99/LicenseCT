@@ -264,6 +264,10 @@ class ActivationBotAppTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(
             app._is_valid_activation_code("R_6FC104DC-2B94-40B7-952E-31D84DC3C52E")
         )
+        self.assertEqual(
+            app._normalize_activation_code("R_6FC104DC-2b94-40B7-952E-31D84DC3C52E"),
+            "R_6FC104DC-2b94-40B7-952E-31D84DC3C52E",
+        )
 
     async def test_activation_code_local_validation_rejects_spaces_and_persian(self):
         app = ActivationBotApp.__new__(ActivationBotApp)
