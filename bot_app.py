@@ -26,6 +26,7 @@ from storage import BotStorage, utc_now_iso
 
 ACTIVATION_CODE_WHITESPACE_PATTERN = re.compile(r"\s")
 ACTIVATION_CODE_PERSIAN_PATTERN = re.compile(r"[\u0600-\u06FF]")
+CHATGPT_COMMAND_PATTERN = re.compile(r"^/chatgpt(?:@\w+)?$", re.IGNORECASE)
 
 
 def json_dumps(value: Any) -> str:
@@ -457,8 +458,14 @@ class ActivationBotApp:
             return False
         return True
 
+    def _is_chatgpt_command(self, value: str) -> bool:
+        return bool(CHATGPT_COMMAND_PATTERN.fullmatch((value or "").strip()))
+
     def _sanitize_api_text(self, value: str) -> str:
         return re.sub(r"(?i)\bcdk\b", "activation code", value or "")
+
+    def _resolve_activation_code(self, submitted_code: str, payload: dict[str, Any]) -> str:
+        return str(payload.get("code") or submitted_code).strip() or submitted_code
 
     def _sanitize_payload_for_user(self, value: Any) -> Any:
         if isinstance(value, dict):
@@ -588,6 +595,36 @@ class ActivationBotApp:
                 responder=event.respond,
                 language=language or "fa",
             )
+            return
+
+        if self._is_chatgpt_command(text):
+            if not language:
+                await self._send_language_selector(
+                    user_id,
+                    responder=event.respond,
+                    language="fa",
+                )
+                return
+
+            self.storage.log_event(
+                user_id=user_id,
+                event_type="chatgpt_command",
+                details="activation_flow_requested",
+            )
+            if state["state"] == "processing_order":
+                await self._reply(
+                    user_id,
+                    event.respond,
+                    self._format_panel(
+                        self._ui_text("order_in_progress_title", language),
+                        self._render_key("in_progress_message", language=language),
+                        "⏳",
+                    ),
+                    buttons=self.flow_menu_buttons(language),
+                    sticker_kind="processing",
+                )
+            else:
+                await self.start_activation_flow(user_id, responder=event.respond)
             return
 
         if not language:
@@ -961,13 +998,14 @@ class ActivationBotApp:
             )
             return
 
+        resolved_activation_code = self._resolve_activation_code(activation_code, payload)
         unknown_value = self._ui_text("unknown_value", language)
         app_name = str(payload.get("app_name") or unknown_value)
         product_name = str(payload.get("app_product_name") or unknown_value)
         self.storage.save_state(
             user_id,
             state="waiting_session_fragments",
-            activation_code=activation_code,
+            activation_code=resolved_activation_code,
             activation_app_name=app_name,
             activation_product_name=product_name,
             activation_payload=json.dumps(payload, ensure_ascii=False),
@@ -981,13 +1019,14 @@ class ActivationBotApp:
         self.storage.log_event(
             user_id=user_id,
             event_type="activation_code_valid",
-            details=payload,
+            details={**payload, "resolved_activation_code": resolved_activation_code},
         )
         self.logger.info(
-            "activation_code_valid user_id=%s product=%s app=%s",
+            "activation_code_valid user_id=%s product=%s app=%s code=%s",
             user_id,
             product_name,
             app_name,
+            self._mask_value(resolved_activation_code, keep_start=8, keep_end=6),
         )
         await self._delete_message(user_id, checking_message)
         await self._reply(

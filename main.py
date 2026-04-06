@@ -8,11 +8,15 @@ from bot_app import ActivationBotApp
 from settings import Settings
 
 
-def setup_logging(log_path: Path) -> logging.Logger:
+def setup_logging(log_path: Path, logger_name: str) -> logging.Logger:
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    logger = logging.getLogger("activation_bot")
+    logger = logging.getLogger(logger_name)
     logger.setLevel(logging.INFO)
-    logger.handlers.clear()
+    logger.propagate = False
+
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
 
     formatter = logging.Formatter(
         "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
@@ -29,12 +33,20 @@ def setup_logging(log_path: Path) -> logging.Logger:
     return logger
 
 
-async def run_bot() -> None:
-    settings = Settings.from_env()
-    logger = setup_logging(settings.log_path)
-    app = ActivationBotApp(settings, logger)
-    await app.run()
+async def run_bots() -> None:
+    settings_list = Settings.load_all_from_env()
+    apps: list[ActivationBotApp] = []
+
+    for settings in settings_list:
+        logger = setup_logging(
+            settings.log_path,
+            logger_name=f"activation_bot.bot{settings.bot_index}",
+        )
+        logger.info("Bot instance prepared bot_index=%s", settings.bot_index)
+        apps.append(ActivationBotApp(settings, logger))
+
+    await asyncio.gather(*(app.run() for app in apps))
 
 
 if __name__ == "__main__":
-    asyncio.run(run_bot())
+    asyncio.run(run_bots())

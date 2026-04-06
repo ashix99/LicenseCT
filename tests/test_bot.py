@@ -203,6 +203,7 @@ class SettingsTests(unittest.TestCase):
             api_base_url="https://example.com",
             product_id="chatgpt",
             support_username="@support",
+            guide_link="https://t.me/example",
             database_path=Path("db.sqlite3"),
             log_path=Path("bot.log"),
             telethon_session_name="telethon_bot",
@@ -244,6 +245,61 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("message", rendered.lower())
         self.assertIn("@", rendered)
 
+    @mock.patch("settings.load_env_file")
+    def test_load_all_from_env_supports_multiple_bots(self, load_env_file_mock):
+        del load_env_file_mock
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "BOT_COUNT": "2",
+                "BOT_1_TOKEN": "token-1",
+                "BOT_1_SUPPORT_USERNAME": "@support1",
+                "BOT_1_GUIDE_LINK": "https://t.me/guide1",
+                "BOT_2_TOKEN": "token-2",
+                "BOT_2_SUPPORT_USERNAME": "@support2",
+                "BOT_2_GUIDE_LINK": "https://t.me/guide2",
+                "TELEGRAM_API_ID": "1",
+                "TELEGRAM_API_HASH": "hash",
+            },
+            clear=True,
+        ):
+            settings_list = Settings.load_all_from_env()
+
+        self.assertEqual(len(settings_list), 2)
+        self.assertEqual(settings_list[0].telegram_bot_token, "token-1")
+        self.assertEqual(settings_list[0].support_username, "@support1")
+        self.assertEqual(settings_list[0].guide_link, "https://t.me/guide1")
+        self.assertEqual(settings_list[0].telethon_session_name, "telethon_bot_1")
+        self.assertEqual(settings_list[1].telegram_bot_token, "token-2")
+        self.assertEqual(settings_list[1].support_username, "@support2")
+        self.assertEqual(settings_list[1].guide_link, "https://t.me/guide2")
+        self.assertEqual(settings_list[1].telethon_session_name, "telethon_bot_2")
+
+    @mock.patch("settings.load_env_file")
+    def test_load_all_from_env_keeps_base_paths_for_single_bot_count(self, load_env_file_mock):
+        del load_env_file_mock
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "BOT_COUNT": "1",
+                "BOT_1_TOKEN": "token-1",
+                "BOT_1_SUPPORT_USERNAME": "@support1",
+                "BOT_1_GUIDE_LINK": "https://t.me/guide1",
+                "TELEGRAM_API_ID": "1",
+                "TELEGRAM_API_HASH": "hash",
+                "DATABASE_PATH": "bot_data.sqlite3",
+                "LOG_PATH": "bot.log",
+                "TELETHON_SESSION_NAME": "telethon_bot",
+            },
+            clear=True,
+        ):
+            settings_list = Settings.load_all_from_env()
+
+        self.assertEqual(len(settings_list), 1)
+        self.assertEqual(settings_list[0].database_path.name, "bot_data.sqlite3")
+        self.assertEqual(settings_list[0].log_path.name, "bot.log")
+        self.assertEqual(settings_list[0].telethon_session_name, "telethon_bot")
+
 
 class ActivationBotAppTaskTests(unittest.IsolatedAsyncioTestCase):
     async def test_cancel_session_task_preserves_current_task_when_requested(self):
@@ -273,6 +329,20 @@ class ActivationBotAppTaskTests(unittest.IsolatedAsyncioTestCase):
         app = ActivationBotApp.__new__(ActivationBotApp)
         self.assertFalse(app._is_valid_activation_code("78DC 7BA3-DE88-485C"))
         self.assertFalse(app._is_valid_activation_code("کد-TEST-123"))
+
+    async def test_activation_code_resolves_to_api_returned_code(self):
+        app = ActivationBotApp.__new__(ActivationBotApp)
+        resolved = app._resolve_activation_code(
+            "R_6FC104DC-2B94-40B7-952E-31D84DC3C52E",
+            {"code": "6FC104DC-2B94-40B7-952E-31D84DC3C52E"},
+        )
+        self.assertEqual(resolved, "6FC104DC-2B94-40B7-952E-31D84DC3C52E")
+
+    async def test_chatgpt_command_detection(self):
+        app = ActivationBotApp.__new__(ActivationBotApp)
+        self.assertTrue(app._is_chatgpt_command("/chatgpt"))
+        self.assertTrue(app._is_chatgpt_command("/chatgpt@TestBot"))
+        self.assertFalse(app._is_chatgpt_command("/chatgpt extra"))
 
 
 if __name__ == "__main__":
