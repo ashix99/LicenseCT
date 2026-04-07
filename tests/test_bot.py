@@ -158,6 +158,142 @@ class StorageTests(unittest.TestCase):
             if db_path.exists():
                 db_path.unlink()
 
+    def test_user_registry_and_notification_settings(self):
+        db_path = Path.cwd() / f"test_{uuid.uuid4().hex}.sqlite3"
+        try:
+            storage = BotStorage(db_path)
+            is_new = storage.upsert_user(
+                user_id=2002,
+                username="DexAshkan",
+                first_name="Ashkan",
+                last_name="",
+                display_name="Ashkan",
+                is_admin=True,
+            )
+            self.assertTrue(is_new)
+            self.assertEqual(len(storage.list_recent_users()), 1)
+            self.assertEqual(storage.get_user(2002)["username"], "DexAshkan")
+            self.assertTrue(storage.get_notification_settings()["notify_new_user"])
+            storage.set_setting_bool("notify_new_user", False)
+            self.assertFalse(storage.get_notification_settings()["notify_new_user"])
+            storage.set_admin_chat_id(2002)
+            self.assertEqual(storage.get_admin_chat_id(), 2002)
+        finally:
+            storage.connection.close()
+            if db_path.exists():
+                db_path.unlink()
+
+    def test_paginated_queries_for_users_and_orders(self):
+        db_path = Path.cwd() / f"test_{uuid.uuid4().hex}.sqlite3"
+        try:
+            storage = BotStorage(db_path)
+            storage.upsert_user(
+                user_id=1,
+                username="alpha",
+                first_name="Alpha",
+                last_name="",
+                display_name="Alpha",
+                is_admin=False,
+            )
+            storage.upsert_user(
+                user_id=2,
+                username="beta",
+                first_name="Beta",
+                last_name="",
+                display_name="Beta",
+                is_admin=False,
+            )
+            success_id = storage.create_order(
+                user_id=1,
+                activation_code="A1",
+                app_name="ChatGPT",
+                product_name="Plus 1M",
+                email="a@example.com",
+                plan_type="free",
+                raw_session="{}",
+                status="success",
+            )
+            failed_id = storage.create_order(
+                user_id=2,
+                activation_code="B1",
+                app_name="ChatGPT",
+                product_name="Plus 1M",
+                email="b@example.com",
+                plan_type="free",
+                raw_session="{}",
+                status="failed",
+            )
+            self.assertIsNotNone(success_id)
+            self.assertIsNotNone(failed_id)
+            self.assertEqual(storage.count_completed_orders_filtered("all"), 2)
+            self.assertEqual(storage.count_completed_orders_filtered("success"), 1)
+            self.assertEqual(storage.count_completed_orders_filtered("failed"), 1)
+            success_rows = storage.query_completed_orders(
+                limit=10,
+                offset=0,
+                status_filter="success",
+                sort_key="newest",
+            )
+            self.assertEqual(len(success_rows), 1)
+            self.assertEqual(success_rows[0]["user_id"], 1)
+            self.assertEqual(storage.count_users_filtered("with_orders"), 2)
+            self.assertEqual(storage.count_users_filtered("without_orders"), 0)
+            user_rows = storage.query_users(
+                limit=10,
+                offset=0,
+                filter_mode="all",
+                sort_key="name_az",
+            )
+            self.assertEqual(len(user_rows), 2)
+            self.assertEqual(user_rows[0]["username"], "alpha")
+
+            email_rows = storage.query_completed_orders(
+                limit=10,
+                offset=0,
+                status_filter="all",
+                sort_key="newest",
+                search_query="b@example.com",
+            )
+            self.assertEqual(len(email_rows), 1)
+            self.assertEqual(email_rows[0]["user_id"], 2)
+
+            username_rows = storage.query_completed_orders(
+                limit=10,
+                offset=0,
+                status_filter="all",
+                sort_key="newest",
+                search_query="alpha",
+            )
+            self.assertEqual(len(username_rows), 1)
+            self.assertEqual(username_rows[0]["user_id"], 1)
+
+            activation_rows = storage.query_completed_orders(
+                limit=10,
+                offset=0,
+                status_filter="all",
+                sort_key="newest",
+                search_query="B1",
+            )
+            self.assertEqual(len(activation_rows), 1)
+            self.assertEqual(activation_rows[0]["user_id"], 2)
+
+            searched_users = storage.query_users(
+                limit=10,
+                offset=0,
+                filter_mode="all",
+                sort_key="name_az",
+                search_query="a@example.com",
+            )
+            self.assertEqual(len(searched_users), 1)
+            self.assertEqual(searched_users[0]["username"], "alpha")
+
+            self.assertEqual(storage.count_completed_orders_filtered("all", search_query="alpha"), 1)
+            self.assertEqual(storage.count_users_filtered("all", search_query="b@example.com"), 1)
+        finally:
+            storage.connection.close()
+            if db_path.exists():
+                db_path.unlink()
+
 
 class ApiClientTests(unittest.TestCase):
     @mock.patch("receipt_api.requests.request")
@@ -202,10 +338,12 @@ class SettingsTests(unittest.TestCase):
             telegram_api_hash="hash",
             api_base_url="https://example.com",
             product_id="chatgpt",
+            admin_username="@DexAshkan",
             support_username="@support",
             guide_link="https://t.me/example",
             database_path=Path("db.sqlite3"),
             log_path=Path("bot.log"),
+            exports_path=Path("exports"),
             telethon_session_name="telethon_bot",
             session_window_seconds=4,
             session_max_messages=3,
@@ -244,6 +382,8 @@ class SettingsTests(unittest.TestCase):
         rendered = settings.render_key("support_message", language="en")
         self.assertIn("message", rendered.lower())
         self.assertIn("@", rendered)
+        self.assertEqual(settings.admin_usernames, ("@DexAshkan",))
+        self.assertEqual(settings.super_admin_usernames, ())
 
     @mock.patch("settings.load_env_file")
     def test_load_all_from_env_supports_multiple_bots(self, load_env_file_mock):
@@ -253,9 +393,12 @@ class SettingsTests(unittest.TestCase):
             {
                 "BOT_COUNT": "2",
                 "BOT_1_TOKEN": "token-1",
+                "SUPER_ADMIN_USERNAME": "@super1",
+                "BOT_1_ADMIN_USERNAME": "@admin1, @admin1b",
                 "BOT_1_SUPPORT_USERNAME": "@support1",
                 "BOT_1_GUIDE_LINK": "https://t.me/guide1",
                 "BOT_2_TOKEN": "token-2",
+                "BOT_2_ADMIN_USERNAME": "@admin2, @admin2b",
                 "BOT_2_SUPPORT_USERNAME": "@support2",
                 "BOT_2_GUIDE_LINK": "https://t.me/guide2",
                 "TELEGRAM_API_ID": "1",
@@ -267,13 +410,21 @@ class SettingsTests(unittest.TestCase):
 
         self.assertEqual(len(settings_list), 2)
         self.assertEqual(settings_list[0].telegram_bot_token, "token-1")
+        self.assertEqual(settings_list[0].super_admin_usernames, ("@super1",))
+        self.assertEqual(settings_list[0].admin_username, "@admin1, @admin1b")
+        self.assertEqual(settings_list[0].admin_usernames, ("@admin1", "@admin1b"))
         self.assertEqual(settings_list[0].support_username, "@support1")
         self.assertEqual(settings_list[0].guide_link, "https://t.me/guide1")
+        self.assertEqual(settings_list[0].exports_path.name, "bot1")
         self.assertEqual(settings_list[0].telethon_session_name, "telethon_bot_1")
         self.assertEqual(settings_list[1].telegram_bot_token, "token-2")
+        self.assertEqual(settings_list[1].admin_username, "@admin2, @admin2b")
+        self.assertEqual(settings_list[1].admin_usernames, ("@admin2", "@admin2b"))
         self.assertEqual(settings_list[1].support_username, "@support2")
         self.assertEqual(settings_list[1].guide_link, "https://t.me/guide2")
+        self.assertEqual(settings_list[1].exports_path.name, "bot2")
         self.assertEqual(settings_list[1].telethon_session_name, "telethon_bot_2")
+        self.assertEqual(settings_list[1].super_admin_usernames, ("@super1",))
 
     @mock.patch("settings.load_env_file")
     def test_load_all_from_env_keeps_base_paths_for_single_bot_count(self, load_env_file_mock):
@@ -283,12 +434,15 @@ class SettingsTests(unittest.TestCase):
             {
                 "BOT_COUNT": "1",
                 "BOT_1_TOKEN": "token-1",
+                "SUPER_ADMIN_USERNAME": "@super1",
+                "BOT_1_ADMIN_USERNAME": "@admin1",
                 "BOT_1_SUPPORT_USERNAME": "@support1",
                 "BOT_1_GUIDE_LINK": "https://t.me/guide1",
                 "TELEGRAM_API_ID": "1",
                 "TELEGRAM_API_HASH": "hash",
                 "DATABASE_PATH": "bot_data.sqlite3",
                 "LOG_PATH": "bot.log",
+                "EXPORTS_PATH": "exports",
                 "TELETHON_SESSION_NAME": "telethon_bot",
             },
             clear=True,
@@ -298,7 +452,37 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(len(settings_list), 1)
         self.assertEqual(settings_list[0].database_path.name, "bot_data.sqlite3")
         self.assertEqual(settings_list[0].log_path.name, "bot.log")
+        self.assertEqual(settings_list[0].exports_path.name, "exports")
         self.assertEqual(settings_list[0].telethon_session_name, "telethon_bot")
+        self.assertEqual(settings_list[0].super_admin_usernames, ("@super1",))
+
+    @mock.patch("settings.load_env_file")
+    def test_load_all_from_env_uses_global_support_defaults(self, load_env_file_mock):
+        del load_env_file_mock
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "BOT_COUNT": "2",
+                "BOT_1_TOKEN": "token-1",
+                "BOT_2_TOKEN": "token-2",
+                "SUPER_ADMIN_USERNAME": "@super1",
+                "BOT_1_ADMIN_USERNAME": "@admin1",
+                "BOT_2_ADMIN_USERNAME": "@admin2",
+                "SUPPORT_USERNAME": "@sharedsupport",
+                "GUIDE_LINK": "https://t.me/sharedguide",
+                "TELEGRAM_API_ID": "1",
+                "TELEGRAM_API_HASH": "hash",
+            },
+            clear=True,
+        ):
+            settings_list = Settings.load_all_from_env()
+
+        self.assertEqual(settings_list[0].support_username, "@sharedsupport")
+        self.assertEqual(settings_list[1].support_username, "@sharedsupport")
+        self.assertEqual(settings_list[0].guide_link, "https://t.me/sharedguide")
+        self.assertEqual(settings_list[1].guide_link, "https://t.me/sharedguide")
+        self.assertEqual(settings_list[0].super_admin_usernames, ("@super1",))
+        self.assertEqual(settings_list[1].super_admin_usernames, ("@super1",))
 
 
 class ActivationBotAppTaskTests(unittest.IsolatedAsyncioTestCase):
@@ -343,6 +527,49 @@ class ActivationBotAppTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(app._is_chatgpt_command("/chatgpt"))
         self.assertTrue(app._is_chatgpt_command("/chatgpt@TestBot"))
         self.assertFalse(app._is_chatgpt_command("/chatgpt extra"))
+
+    async def test_admin_command_detection(self):
+        app = ActivationBotApp.__new__(ActivationBotApp)
+        self.assertTrue(app._is_admin_command("/admin"))
+        self.assertTrue(app._is_admin_command("/admin@TestBot"))
+        self.assertFalse(app._is_admin_command("/admin extra"))
+
+    async def test_admin_identity_accepts_multiple_usernames(self):
+        app = ActivationBotApp.__new__(ActivationBotApp)
+        app.settings = mock.Mock(
+            admin_usernames=("@GemPeakSup",),
+            super_admin_usernames=("@DexAshkan",),
+        )
+        app.storage = mock.Mock()
+        app.storage.get_admin_chat_id.return_value = None
+        self.assertTrue(app._is_admin_identity(1, "DexAshkan"))
+        self.assertTrue(app._is_admin_identity(1, "GemPeakSup"))
+        self.assertFalse(app._is_admin_identity(1, "AnotherUser"))
+
+    async def test_parse_admin_view_data(self):
+        app = ActivationBotApp.__new__(ActivationBotApp)
+        parsed = app._parse_admin_view_data(b"admin:view:history:2:50:success:newest")
+        self.assertEqual(parsed["view_kind"], "history")
+        self.assertEqual(parsed["page"], 2)
+        self.assertEqual(parsed["per_page"], 50)
+        self.assertEqual(parsed["filter_key"], "success")
+        self.assertEqual(parsed["sort_key"], "newest")
+
+    async def test_telegram_id_text_prefers_username(self):
+        app = ActivationBotApp.__new__(ActivationBotApp)
+        self.assertEqual(app._telegram_id_text("DexAshkan"), "@DexAshkan")
+        self.assertEqual(app._telegram_id_text("@DexAshkan"), "@DexAshkan")
+        self.assertEqual(app._telegram_id_text(""), "-")
+
+    async def test_admin_notification_targets_collects_all_known_admins(self):
+        app = ActivationBotApp.__new__(ActivationBotApp)
+        app.storage = mock.Mock()
+        app.storage.list_admin_users.return_value = [
+            {"user_id": 10},
+            {"user_id": 20},
+        ]
+        app.storage.get_admin_chat_id.return_value = 30
+        self.assertEqual(app._admin_notification_targets(), [10, 20, 30])
 
 
 if __name__ == "__main__":

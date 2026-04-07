@@ -15,6 +15,11 @@ except ImportError:  # pragma: no cover - runtime dependency
     TelegramClient = None
     events = None
 
+from admin_exports import (
+    build_export_path,
+    export_activation_history_xlsx,
+    export_users_xlsx,
+)
 from receipt_api import ApiError, ReceiptApiClient
 from session_data import (
     SessionData,
@@ -27,6 +32,7 @@ from storage import BotStorage, utc_now_iso
 ACTIVATION_CODE_WHITESPACE_PATTERN = re.compile(r"\s")
 ACTIVATION_CODE_PERSIAN_PATTERN = re.compile(r"[\u0600-\u06FF]")
 CHATGPT_COMMAND_PATTERN = re.compile(r"^/chatgpt(?:@\w+)?$", re.IGNORECASE)
+ADMIN_COMMAND_PATTERN = re.compile(r"^/admin(?:@\w+)?$", re.IGNORECASE)
 
 
 def json_dumps(value: Any) -> str:
@@ -87,6 +93,77 @@ class ActivationBotApp:
             "result_message": "پیام",
             "result_note": "نکته",
             "result_api_details": "جزئیات API",
+            "admin_title": "پنل ادمین",
+            "admin_panel_body": "ربات: {bot_label}\nکاربران ثبت‌شده: {user_count}\nفعالسازی‌های ثبت‌شده: {order_count}\nنوتیف کاربر جدید: {notify_new_user}\nنوتیف فعالسازی موفق: {notify_activation_success}\nنوتیف فعالسازی ناموفق: {notify_activation_failed}",
+            "admin_unauthorized": "این بخش فقط برای ادمین ربات در دسترس است.",
+            "admin_history_button_text": "تاریخچه فعالسازی",
+            "admin_users_button_text": "کاربرها",
+            "admin_search_orders_button_text": "جستجوی فعالسازی",
+            "admin_search_users_button_text": "جستجوی کاربر",
+            "admin_clear_search_button_text": "پاک کردن جستجو",
+            "admin_notifications_button_text": "مدیریت نوتیف‌ها",
+            "admin_export_orders_button_text": "اکسل فعالسازی‌ها",
+            "admin_export_users_button_text": "اکسل کاربرها",
+            "admin_refresh_button_text": "بروزرسانی",
+            "admin_close_button_text": "بستن پنل",
+            "admin_notifications_title": "مدیریت نوتیف‌ها",
+            "admin_notifications_body": "وضعیت فعلی نوتیف‌های این ربات را از دکمه‌های زیر تغییر بدهید.",
+            "admin_toggle_new_user": "نوتیف کاربر جدید",
+            "admin_toggle_activation_success": "نوتیف فعالسازی موفق",
+            "admin_toggle_activation_failed": "نوتیف فعالسازی ناموفق",
+            "admin_back_button_text": "بازگشت",
+            "admin_closed": "پنل ادمین بسته شد.",
+            "admin_history_title": "آخرین فعالسازی‌ها",
+            "admin_users_title": "آخرین کاربرها",
+            "admin_history_search_prompt_title": "جستجوی فعالسازی",
+            "admin_history_search_prompt_body": "ایمیل، آیدی تلگرام یا کد فعالسازی را ارسال کنید تا سفارش‌های مرتبط نمایش داده شوند.",
+            "admin_users_search_prompt_title": "جستجوی کاربر",
+            "admin_users_search_prompt_body": "آیدی تلگرام، نام، ایمیل یا کد فعالسازی را ارسال کنید تا کاربران مرتبط نمایش داده شوند.",
+            "admin_no_orders": "هنوز فعالسازی ثبت‌شده‌ای وجود ندارد.",
+            "admin_no_users": "هنوز کاربر ثبت‌شده‌ای وجود ندارد.",
+            "admin_no_orders_search": "نتیجه‌ای برای این جستجو پیدا نشد.",
+            "admin_no_users_search": "کاربری با این جستجو پیدا نشد.",
+            "admin_export_orders_caption": "فایل اکسل فعالسازی‌های ثبت‌شده.",
+            "admin_export_users_caption": "فایل اکسل کاربرهای ثبت‌شده.",
+            "admin_new_user_notification_title": "کاربر جدید وارد ربات شد",
+            "admin_activation_success_notification_title": "فعالسازی موفق",
+            "admin_activation_failed_notification_title": "فعالسازی ناموفق",
+            "admin_label_bot": "ربات",
+            "admin_label_telegram_id": "آیدی تلگرام",
+            "admin_label_name": "نام",
+            "admin_label_username": "یوزرنیم",
+            "admin_label_email": "ایمیل",
+            "admin_label_activation_code": "کد فعالسازی",
+            "admin_label_time": "زمان",
+            "admin_label_status": "وضعیت",
+            "admin_label_message": "پیام",
+            "admin_label_first_seen": "اولین ورود",
+            "admin_label_last_seen": "آخرین ورود",
+            "admin_label_total_users": "کاربران ثبت‌شده",
+            "admin_label_total_orders": "فعالسازی‌های ثبت‌شده",
+            "admin_status_on": "روشن",
+            "admin_status_off": "خاموش",
+            "admin_page_label": "صفحه {page}/{total}",
+            "admin_per_page_label": "تعداد",
+            "admin_sort_label": "مرتب‌سازی",
+            "admin_filter_label": "فیلتر",
+            "admin_search_label": "جستجو",
+            "admin_orders_filter_all": "همه",
+            "admin_orders_filter_success": "موفق",
+            "admin_orders_filter_failed": "ناموفق",
+            "admin_orders_sort_newest": "جدیدترین",
+            "admin_orders_sort_oldest": "قدیمی‌ترین",
+            "admin_users_filter_all": "همه",
+            "admin_users_filter_with_orders": "دارای سفارش",
+            "admin_users_filter_without_orders": "بدون سفارش",
+            "admin_users_sort_joined_new": "عضویت جدید",
+            "admin_users_sort_joined_old": "عضویت قدیم",
+            "admin_users_sort_last_seen": "آخرین ورود",
+            "admin_users_sort_last_order": "آخرین تراکنش",
+            "admin_users_sort_name_az": "الفبا",
+            "admin_users_sort_name_za": "ی-الف",
+            "admin_label_total_transactions": "تعداد سفارش‌ها",
+            "admin_label_last_transaction": "آخرین تراکنش",
         },
         "en": {
             "choose_language_title": "Choose Language",
@@ -140,6 +217,77 @@ class ActivationBotApp:
             "result_message": "Message",
             "result_note": "Note",
             "result_api_details": "API Details",
+            "admin_title": "Admin Panel",
+            "admin_panel_body": "Bot: {bot_label}\nRegistered users: {user_count}\nRecorded activations: {order_count}\nNew user notifications: {notify_new_user}\nSuccessful activation notifications: {notify_activation_success}\nFailed activation notifications: {notify_activation_failed}",
+            "admin_unauthorized": "This section is only available to the bot admin.",
+            "admin_history_button_text": "Activation History",
+            "admin_users_button_text": "Users",
+            "admin_search_orders_button_text": "Search Activations",
+            "admin_search_users_button_text": "Search Users",
+            "admin_clear_search_button_text": "Clear Search",
+            "admin_notifications_button_text": "Manage Notifications",
+            "admin_export_orders_button_text": "Activations Excel",
+            "admin_export_users_button_text": "Users Excel",
+            "admin_refresh_button_text": "Refresh",
+            "admin_close_button_text": "Close Panel",
+            "admin_notifications_title": "Notification Settings",
+            "admin_notifications_body": "Use the buttons below to turn this bot's notifications on or off.",
+            "admin_toggle_new_user": "New User Notifications",
+            "admin_toggle_activation_success": "Successful Activation Notifications",
+            "admin_toggle_activation_failed": "Failed Activation Notifications",
+            "admin_back_button_text": "Back",
+            "admin_closed": "Admin panel closed.",
+            "admin_history_title": "Latest Activations",
+            "admin_users_title": "Latest Users",
+            "admin_history_search_prompt_title": "Search Activations",
+            "admin_history_search_prompt_body": "Send an email, Telegram ID, or activation code to list matching orders.",
+            "admin_users_search_prompt_title": "Search Users",
+            "admin_users_search_prompt_body": "Send a Telegram ID, name, email, or activation code to list matching users.",
+            "admin_no_orders": "No recorded activations yet.",
+            "admin_no_users": "No registered users yet.",
+            "admin_no_orders_search": "No matching activations were found for this search.",
+            "admin_no_users_search": "No matching users were found for this search.",
+            "admin_export_orders_caption": "Excel export for recorded activations.",
+            "admin_export_users_caption": "Excel export for registered users.",
+            "admin_new_user_notification_title": "New User Joined The Bot",
+            "admin_activation_success_notification_title": "Activation Succeeded",
+            "admin_activation_failed_notification_title": "Activation Failed",
+            "admin_label_bot": "Bot",
+            "admin_label_telegram_id": "Telegram ID",
+            "admin_label_name": "Name",
+            "admin_label_username": "Username",
+            "admin_label_email": "Email",
+            "admin_label_activation_code": "Activation Code",
+            "admin_label_time": "Time",
+            "admin_label_status": "Status",
+            "admin_label_message": "Message",
+            "admin_label_first_seen": "First Seen",
+            "admin_label_last_seen": "Last Seen",
+            "admin_label_total_users": "Registered Users",
+            "admin_label_total_orders": "Recorded Activations",
+            "admin_status_on": "On",
+            "admin_status_off": "Off",
+            "admin_page_label": "Page {page}/{total}",
+            "admin_per_page_label": "Per Page",
+            "admin_sort_label": "Sort",
+            "admin_filter_label": "Filter",
+            "admin_search_label": "Search",
+            "admin_orders_filter_all": "All",
+            "admin_orders_filter_success": "Success",
+            "admin_orders_filter_failed": "Failed",
+            "admin_orders_sort_newest": "Newest",
+            "admin_orders_sort_oldest": "Oldest",
+            "admin_users_filter_all": "All",
+            "admin_users_filter_with_orders": "With Orders",
+            "admin_users_filter_without_orders": "No Orders",
+            "admin_users_sort_joined_new": "Newest Joined",
+            "admin_users_sort_joined_old": "Oldest Joined",
+            "admin_users_sort_last_seen": "Last Seen",
+            "admin_users_sort_last_order": "Last Transaction",
+            "admin_users_sort_name_az": "A-Z",
+            "admin_users_sort_name_za": "Z-A",
+            "admin_label_total_transactions": "Orders",
+            "admin_label_last_transaction": "Last Transaction",
         },
     }
 
@@ -258,6 +406,656 @@ class ActivationBotApp:
             )
         ]]
 
+    def _admin_panel_buttons(self, language: str) -> list[list[Any]]:
+        return [
+            [
+                Button.inline(
+                    f"📋 {self._ui_text('admin_history_button_text', language)}",
+                    data=b"admin:history",
+                ),
+                Button.inline(
+                    f"👥 {self._ui_text('admin_users_button_text', language)}",
+                    data=b"admin:users",
+                ),
+            ],
+            [
+                Button.inline(
+                    f"🔎 {self._ui_text('admin_search_orders_button_text', language)}",
+                    data=b"admin:search_orders",
+                ),
+                Button.inline(
+                    f"🔍 {self._ui_text('admin_search_users_button_text', language)}",
+                    data=b"admin:search_users",
+                ),
+            ],
+            [
+                Button.inline(
+                    f"🔔 {self._ui_text('admin_notifications_button_text', language)}",
+                    data=b"admin:notifications",
+                ),
+            ],
+            [
+                Button.inline(
+                    f"📊 {self._ui_text('admin_export_orders_button_text', language)}",
+                    data=b"admin:export_orders",
+                ),
+                Button.inline(
+                    f"📁 {self._ui_text('admin_export_users_button_text', language)}",
+                    data=b"admin:export_users",
+                ),
+            ],
+            [
+                Button.inline(
+                    f"🔄 {self._ui_text('admin_refresh_button_text', language)}",
+                    data=b"admin:panel",
+                ),
+                Button.inline(
+                    f"❌ {self._ui_text('admin_close_button_text', language)}",
+                    data=b"admin:close",
+                ),
+            ],
+        ]
+
+    def _admin_search_state_name(self, view_kind: str) -> str:
+        return f"waiting_admin_{view_kind}_search"
+
+    def _load_admin_context_payload(self, user_id: int) -> dict[str, Any]:
+        state = self.storage.get_state(user_id)
+        raw_payload = str(state.get("activation_payload") or "").strip()
+        if not raw_payload:
+            return {"admin_views": {}}
+        try:
+            payload = json.loads(raw_payload)
+        except json.JSONDecodeError:
+            return {"admin_views": {}}
+        if not isinstance(payload, dict):
+            return {"admin_views": {}}
+        admin_views = payload.get("admin_views")
+        if not isinstance(admin_views, dict):
+            return {"admin_views": {}}
+        return {"admin_views": admin_views}
+
+    def _default_admin_view_context(self, view_kind: str) -> dict[str, Any]:
+        if view_kind == "users":
+            return {
+                "page": 1,
+                "per_page": 20,
+                "filter_key": "all",
+                "sort_key": "last_seen",
+                "search_query": "",
+            }
+        return {
+            "page": 1,
+            "per_page": 20,
+            "filter_key": "all",
+            "sort_key": "newest",
+            "search_query": "",
+        }
+
+    def _get_admin_view_context(self, user_id: int, view_kind: str) -> dict[str, Any]:
+        payload = self._load_admin_context_payload(user_id)
+        stored = payload["admin_views"].get(view_kind)
+        if not isinstance(stored, dict):
+            return self._default_admin_view_context(view_kind)
+        context = self._default_admin_view_context(view_kind)
+        context.update(
+            {
+                "page": max(1, int(stored.get("page") or context["page"])),
+                "per_page": int(stored.get("per_page") or context["per_page"]),
+                "filter_key": str(stored.get("filter_key") or context["filter_key"]),
+                "sort_key": str(stored.get("sort_key") or context["sort_key"]),
+                "search_query": str(stored.get("search_query") or ""),
+            }
+        )
+        return context
+
+    def _save_admin_view_context(
+        self,
+        user_id: int,
+        view_kind: str,
+        *,
+        page: int,
+        per_page: int,
+        filter_key: str,
+        sort_key: str,
+        search_query: str,
+        state_name: str | None = None,
+    ) -> None:
+        payload = self._load_admin_context_payload(user_id)
+        payload["admin_views"][view_kind] = {
+            "page": max(1, int(page)),
+            "per_page": max(1, int(per_page)),
+            "filter_key": str(filter_key),
+            "sort_key": str(sort_key),
+            "search_query": str(search_query or ""),
+        }
+        updates: dict[str, Any] = {
+            "activation_payload": json.dumps(payload, ensure_ascii=False),
+        }
+        if state_name is not None:
+            updates["state"] = state_name
+        self.storage.save_state(user_id, **updates)
+
+    def _notification_settings_buttons(self, language: str) -> list[list[Any]]:
+        toggles = self.storage.get_notification_settings()
+        return [
+            [
+                Button.inline(
+                    f"{self._bool_emoji(toggles['notify_new_user'])} {self._ui_text('admin_toggle_new_user', language)}",
+                    data=b"admin:toggle:notify_new_user",
+                )
+            ],
+            [
+                Button.inline(
+                    f"{self._bool_emoji(toggles['notify_activation_success'])} {self._ui_text('admin_toggle_activation_success', language)}",
+                    data=b"admin:toggle:notify_activation_success",
+                )
+            ],
+            [
+                Button.inline(
+                    f"{self._bool_emoji(toggles['notify_activation_failed'])} {self._ui_text('admin_toggle_activation_failed', language)}",
+                    data=b"admin:toggle:notify_activation_failed",
+                )
+            ],
+            [
+                Button.inline(
+                    f"⬅️ {self._ui_text('admin_back_button_text', language)}",
+                    data=b"admin:panel",
+                )
+            ],
+        ]
+
+    def _admin_view_data(
+        self,
+        *,
+        view_kind: str,
+        page: int,
+        per_page: int,
+        filter_key: str,
+        sort_key: str,
+    ) -> bytes:
+        return (
+            f"admin:view:{view_kind}:{page}:{per_page}:{filter_key}:{sort_key}"
+        ).encode("utf-8")
+
+    def _parse_admin_view_data(self, data: bytes) -> dict[str, Any] | None:
+        try:
+            decoded = data.decode("utf-8", errors="ignore")
+            _, action, view_kind, page, per_page, filter_key, sort_key = decoded.split(":")
+        except ValueError:
+            return None
+        if action != "view":
+            return None
+        try:
+            page_value = max(1, int(page))
+            per_page_value = int(per_page)
+        except ValueError:
+            return None
+        return {
+            "view_kind": view_kind,
+            "page": page_value,
+            "per_page": per_page_value,
+            "filter_key": filter_key,
+            "sort_key": sort_key,
+        }
+
+    def _page_count(self, total_items: int, per_page: int) -> int:
+        if per_page <= 0:
+            return 1
+        return max(1, (total_items + per_page - 1) // per_page)
+
+    def _page_slice(self, page: int, per_page: int) -> tuple[int, int]:
+        normalized_page = max(1, page)
+        normalized_per_page = max(1, per_page)
+        return normalized_page, (normalized_page - 1) * normalized_per_page
+
+    def _history_per_page_options(self) -> list[int]:
+        return [20, 50, 100]
+
+    def _users_per_page_options(self) -> list[int]:
+        return [20, 50, 100]
+
+    def _history_filter_options(self, language: str) -> list[tuple[str, str]]:
+        return [
+            ("all", self._ui_text("admin_orders_filter_all", language)),
+            ("success", self._ui_text("admin_orders_filter_success", language)),
+            ("failed", self._ui_text("admin_orders_filter_failed", language)),
+        ]
+
+    def _history_sort_options(self, language: str) -> list[tuple[str, str]]:
+        return [
+            ("newest", self._ui_text("admin_orders_sort_newest", language)),
+            ("oldest", self._ui_text("admin_orders_sort_oldest", language)),
+        ]
+
+    def _users_filter_options(self, language: str) -> list[tuple[str, str]]:
+        return [
+            ("all", self._ui_text("admin_users_filter_all", language)),
+            ("with_orders", self._ui_text("admin_users_filter_with_orders", language)),
+            ("without_orders", self._ui_text("admin_users_filter_without_orders", language)),
+        ]
+
+    def _users_sort_options(self, language: str) -> list[tuple[str, str]]:
+        return [
+            ("joined_new", self._ui_text("admin_users_sort_joined_new", language)),
+            ("joined_old", self._ui_text("admin_users_sort_joined_old", language)),
+            ("last_seen", self._ui_text("admin_users_sort_last_seen", language)),
+            ("last_order", self._ui_text("admin_users_sort_last_order", language)),
+            ("name_az", self._ui_text("admin_users_sort_name_az", language)),
+            ("name_za", self._ui_text("admin_users_sort_name_za", language)),
+        ]
+
+    def _selector_label(self, active: bool, text: str) -> str:
+        prefix = "🟢" if active else "⚪️"
+        return f"{prefix} {text}"
+
+    def _history_view_buttons(
+        self,
+        *,
+        language: str,
+        page: int,
+        total_pages: int,
+        per_page: int,
+        filter_key: str,
+        sort_key: str,
+        search_query: str,
+    ) -> list[list[Any]]:
+        prev_page = page - 1 if page > 1 else 1
+        next_page = page + 1 if page < total_pages else total_pages
+        page_label = self._ui_text("admin_page_label", language).format(
+            page=page,
+            total=total_pages,
+        )
+        buttons: list[list[Any]] = [
+            [
+                Button.inline(
+                    "⬅️",
+                    data=self._admin_view_data(
+                        view_kind="history",
+                        page=prev_page,
+                        per_page=per_page,
+                        filter_key=filter_key,
+                        sort_key=sort_key,
+                    ),
+                ),
+                Button.inline(page_label, data=b"admin:noop"),
+                Button.inline(
+                    "➡️",
+                    data=self._admin_view_data(
+                        view_kind="history",
+                        page=next_page,
+                        per_page=per_page,
+                        filter_key=filter_key,
+                        sort_key=sort_key,
+                    ),
+                ),
+            ],
+            [
+                Button.inline(
+                    f"🔎 {self._ui_text('admin_search_orders_button_text', language)}",
+                    data=b"admin:search_orders",
+                ),
+                Button.inline(
+                    f"🧹 {self._ui_text('admin_clear_search_button_text', language)}",
+                    data=b"admin:clear_search:history",
+                ),
+            ]
+            if search_query
+            else [
+                Button.inline(
+                    f"🔎 {self._ui_text('admin_search_orders_button_text', language)}",
+                    data=b"admin:search_orders",
+                )
+            ],
+            [
+                Button.inline(
+                    self._selector_label(option == per_page, str(option)),
+                    data=self._admin_view_data(
+                        view_kind="history",
+                        page=1,
+                        per_page=option,
+                        filter_key=filter_key,
+                        sort_key=sort_key,
+                    ),
+                )
+                for option in self._history_per_page_options()
+            ],
+            [
+                Button.inline(
+                    self._selector_label(option_key == filter_key, option_label),
+                    data=self._admin_view_data(
+                        view_kind="history",
+                        page=1,
+                        per_page=per_page,
+                        filter_key=option_key,
+                        sort_key=sort_key,
+                    ),
+                )
+                for option_key, option_label in self._history_filter_options(language)
+            ],
+            [
+                Button.inline(
+                    self._selector_label(option_key == sort_key, option_label),
+                    data=self._admin_view_data(
+                        view_kind="history",
+                        page=1,
+                        per_page=per_page,
+                        filter_key=filter_key,
+                        sort_key=option_key,
+                    ),
+                )
+                for option_key, option_label in self._history_sort_options(language)
+            ],
+            [
+                Button.inline(
+                    f"⬅️ {self._ui_text('admin_back_button_text', language)}",
+                    data=b"admin:panel",
+                )
+            ],
+        ]
+        return buttons
+
+    def _users_view_buttons(
+        self,
+        *,
+        language: str,
+        page: int,
+        total_pages: int,
+        per_page: int,
+        filter_key: str,
+        sort_key: str,
+        search_query: str,
+    ) -> list[list[Any]]:
+        prev_page = page - 1 if page > 1 else 1
+        next_page = page + 1 if page < total_pages else total_pages
+        page_label = self._ui_text("admin_page_label", language).format(
+            page=page,
+            total=total_pages,
+        )
+        return [
+            [
+                Button.inline(
+                    "⬅️",
+                    data=self._admin_view_data(
+                        view_kind="users",
+                        page=prev_page,
+                        per_page=per_page,
+                        filter_key=filter_key,
+                        sort_key=sort_key,
+                    ),
+                ),
+                Button.inline(page_label, data=b"admin:noop"),
+                Button.inline(
+                    "➡️",
+                    data=self._admin_view_data(
+                        view_kind="users",
+                        page=next_page,
+                        per_page=per_page,
+                        filter_key=filter_key,
+                        sort_key=sort_key,
+                    ),
+                ),
+            ],
+            [
+                Button.inline(
+                    f"🔍 {self._ui_text('admin_search_users_button_text', language)}",
+                    data=b"admin:search_users",
+                ),
+                Button.inline(
+                    f"🧹 {self._ui_text('admin_clear_search_button_text', language)}",
+                    data=b"admin:clear_search:users",
+                ),
+            ]
+            if search_query
+            else [
+                Button.inline(
+                    f"🔍 {self._ui_text('admin_search_users_button_text', language)}",
+                    data=b"admin:search_users",
+                )
+            ],
+            [
+                Button.inline(
+                    self._selector_label(option == per_page, str(option)),
+                    data=self._admin_view_data(
+                        view_kind="users",
+                        page=1,
+                        per_page=option,
+                        filter_key=filter_key,
+                        sort_key=sort_key,
+                    ),
+                )
+                for option in self._users_per_page_options()
+            ],
+            [
+                Button.inline(
+                    self._selector_label(option_key == filter_key, option_label),
+                    data=self._admin_view_data(
+                        view_kind="users",
+                        page=1,
+                        per_page=per_page,
+                        filter_key=option_key,
+                        sort_key=sort_key,
+                    ),
+                )
+                for option_key, option_label in self._users_filter_options(language)
+            ],
+            [
+                Button.inline(
+                    self._selector_label(option_key == sort_key, option_label),
+                    data=self._admin_view_data(
+                        view_kind="users",
+                        page=1,
+                        per_page=per_page,
+                        filter_key=filter_key,
+                        sort_key=option_key,
+                    ),
+                )
+                for option_key, option_label in self._users_sort_options(language)[:3]
+            ],
+            [
+                Button.inline(
+                    self._selector_label(option_key == sort_key, option_label),
+                    data=self._admin_view_data(
+                        view_kind="users",
+                        page=1,
+                        per_page=per_page,
+                        filter_key=filter_key,
+                        sort_key=option_key,
+                    ),
+                )
+                for option_key, option_label in self._users_sort_options(language)[3:]
+            ],
+            [
+                Button.inline(
+                    f"⬅️ {self._ui_text('admin_back_button_text', language)}",
+                    data=b"admin:panel",
+                )
+            ],
+        ]
+
+    def _normalize_username(self, value: str | None) -> str:
+        raw = str(value or "").strip().lower()
+        if raw.startswith("@"):
+            return raw[1:]
+        return raw
+
+    def _is_admin_command(self, value: str) -> bool:
+        return bool(ADMIN_COMMAND_PATTERN.fullmatch((value or "").strip()))
+
+    def _is_admin_identity(self, user_id: int, username: str | None) -> bool:
+        normalized_username = self._normalize_username(username)
+        configured_usernames = {
+            self._normalize_username(item)
+            for item in getattr(self.settings, "admin_usernames", ())
+            if self._normalize_username(item)
+        }
+        super_admin_usernames = {
+            self._normalize_username(item)
+            for item in getattr(self.settings, "super_admin_usernames", ())
+            if self._normalize_username(item)
+        }
+        if normalized_username and (
+            normalized_username in configured_usernames
+            or normalized_username in super_admin_usernames
+        ):
+            return True
+        admin_chat_id = self.storage.get_admin_chat_id()
+        return admin_chat_id == user_id if admin_chat_id is not None else False
+
+    def _is_admin_user(self, user_id: int) -> bool:
+        user = self.storage.get_user(user_id)
+        if user and int(user.get("is_admin") or 0) == 1:
+            return True
+        return self.storage.get_admin_chat_id() == user_id
+
+    def _bot_label(self) -> str:
+        return f"Bot {self.settings.bot_index}"
+
+    def _bool_emoji(self, enabled: bool) -> str:
+        return "🟢" if enabled else "⚪️"
+
+    def _bool_label(self, enabled: bool, language: str) -> str:
+        return self._ui_text("admin_status_on", language) if enabled else self._ui_text("admin_status_off", language)
+
+    def _format_timestamp(self, value: str | None) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return "-"
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return parsed.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return raw
+
+    def _display_name_from_parts(
+        self,
+        *,
+        display_name: str | None,
+        first_name: str | None,
+        last_name: str | None,
+        username: str | None,
+        user_id: int | None = None,
+    ) -> str:
+        cleaned_display = str(display_name or "").strip()
+        if cleaned_display:
+            return cleaned_display
+        name = " ".join(
+            part.strip()
+            for part in [str(first_name or ""), str(last_name or "")]
+            if part and part.strip()
+        ).strip()
+        if name:
+            return name
+        normalized_username = str(username or "").strip()
+        if normalized_username:
+            return f"@{normalized_username}"
+        return str(user_id or self._ui_text("unknown_value", "fa"))
+
+    def _telegram_id_text(self, username: str | None) -> str:
+        normalized_username = str(username or "").strip()
+        if not normalized_username:
+            return "-"
+        if normalized_username.startswith("@"):
+            return normalized_username
+        return f"@{normalized_username}"
+
+    def _log_user_identity(self, user_id: int | None) -> str:
+        bot_label = self._bot_label() if hasattr(self, "settings") else "Bot"
+        if user_id is None:
+            return f"{bot_label} : id:unknown"
+        user = self.storage.get_user(user_id) if hasattr(self, "storage") else None
+        if user:
+            display_name = self._display_name_from_parts(
+                display_name=user.get("display_name"),
+                first_name=user.get("first_name"),
+                last_name=user.get("last_name"),
+                username=user.get("username"),
+                user_id=user_id,
+            )
+            username = self._telegram_id_text(user.get("username"))
+            if username != "-" and display_name and display_name != username:
+                return f"{bot_label} : {display_name} [{username}]"
+            if username != "-":
+                return f"{bot_label} : {username}"
+            if display_name and display_name != str(user_id):
+                return f"{bot_label} : {display_name}"
+        return f"{bot_label} : id:{user_id}"
+
+    def _option_label(
+        self,
+        options: list[tuple[str, str]],
+        key: str,
+        fallback: str,
+    ) -> str:
+        for option_key, option_label in options:
+            if option_key == key:
+                return option_label
+        return fallback
+
+    def _admin_notification_targets(self) -> list[int]:
+        targets: list[int] = []
+        for row in self.storage.list_admin_users():
+            user_id = int(row.get("user_id") or 0)
+            if user_id > 0 and user_id not in targets:
+                targets.append(user_id)
+        legacy_admin_chat_id = self.storage.get_admin_chat_id()
+        if legacy_admin_chat_id is not None and legacy_admin_chat_id not in targets:
+            targets.append(legacy_admin_chat_id)
+        return targets
+
+    async def _register_user_activity(self, event: Any) -> None:
+        user_id = getattr(event, "sender_id", None)
+        if user_id is None:
+            return
+
+        sender = None
+        if hasattr(event, "get_sender"):
+            try:
+                sender = await event.get_sender()
+            except Exception:
+                sender = None
+
+        username = str(getattr(sender, "username", "") or "").strip()
+        first_name = str(getattr(sender, "first_name", "") or "").strip()
+        last_name = str(getattr(sender, "last_name", "") or "").strip()
+        display_name = self._display_name_from_parts(
+            display_name="",
+            first_name=first_name,
+            last_name=last_name,
+            username=username,
+            user_id=user_id,
+        )
+        is_admin = self._is_admin_identity(user_id, username)
+        is_new = self.storage.upsert_user(
+            user_id=user_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            display_name=display_name,
+            is_admin=is_admin,
+        )
+        if is_admin:
+            self.storage.set_admin_chat_id(user_id)
+
+        if is_new:
+            self.storage.log_event(
+                user_id=user_id,
+                event_type="user_registered",
+                details={
+                    "username": username,
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "display_name": display_name,
+                    "is_admin": is_admin,
+                },
+            )
+            if not is_admin and self.storage.get_setting_bool("notify_new_user", True):
+                await self._notify_admin_new_user(
+                    user_id=user_id,
+                    username=username,
+                    display_name=display_name,
+                )
+
     def _should_suggest_retry_later(self, message_text: str) -> bool:
         haystack = (message_text or "").lower()
         markers = (
@@ -271,6 +1069,592 @@ class ActivationBotApp:
             "gateway timeout",
         )
         return any(marker in haystack for marker in markers)
+
+    def _build_admin_panel_text(self, language: str) -> str:
+        toggles = self.storage.get_notification_settings()
+        return self._format_panel(
+            self._ui_text("admin_title", language),
+            self.settings.render(
+                self._ui_text("admin_panel_body", language),
+                language=language,
+                bot_label=self._bot_label(),
+                user_count=self.storage.count_users(),
+                order_count=self.storage.count_completed_orders(),
+                notify_new_user=self._bool_label(toggles["notify_new_user"], language),
+                notify_activation_success=self._bool_label(
+                    toggles["notify_activation_success"], language
+                ),
+                notify_activation_failed=self._bool_label(
+                    toggles["notify_activation_failed"], language
+                ),
+            ),
+            "🛠",
+        )
+
+    def _build_orders_view(
+        self,
+        *,
+        language: str,
+        page: int,
+        per_page: int,
+        status_filter: str,
+        sort_key: str,
+        search_query: str,
+    ) -> tuple[str, list[list[Any]]]:
+        normalized_page, offset = self._page_slice(page, per_page)
+        total_items = self.storage.count_completed_orders_filtered(
+            status_filter,
+            search_query=search_query,
+        )
+        total_pages = self._page_count(total_items, per_page)
+        page_value = min(normalized_page, total_pages)
+        offset = (page_value - 1) * per_page
+        rows = self.storage.query_completed_orders(
+            limit=per_page,
+            offset=offset,
+            status_filter=status_filter,
+            sort_key=sort_key,
+            search_query=search_query,
+        )
+        filter_label = self._option_label(
+            self._history_filter_options(language),
+            status_filter,
+            self._ui_text("admin_orders_filter_all", language),
+        )
+        sort_label = self._option_label(
+            self._history_sort_options(language),
+            sort_key,
+            self._ui_text("admin_orders_sort_newest", language),
+        )
+        summary_lines = [
+            f"<b>{html.escape(self._ui_text('admin_filter_label', language))}:</b> {html.escape(filter_label)}",
+            f"<b>{html.escape(self._ui_text('admin_sort_label', language))}:</b> {html.escape(sort_label)}",
+        ]
+        if search_query:
+            summary_lines.append(
+                f"<b>{html.escape(self._ui_text('admin_search_label', language))}:</b> <code>{html.escape(search_query)}</code>"
+            )
+        if not rows:
+            return self._format_panel(
+                self._ui_text("admin_history_title", language),
+                "\n".join(
+                    [
+                        *summary_lines,
+                        "",
+                        self._ui_text(
+                            "admin_no_orders_search" if search_query else "admin_no_orders",
+                            language,
+                        ),
+                    ]
+                ),
+                "📋",
+            ), self._history_view_buttons(
+                language=language,
+                page=1,
+                total_pages=1,
+                per_page=per_page,
+                filter_key=status_filter,
+                sort_key=sort_key,
+                search_query=search_query,
+            )
+
+        chunks: list[str] = []
+        for row in rows:
+            emoji = "✅" if row["status"] == "success" else "❌"
+            display_name = self._display_name_from_parts(
+                display_name=row.get("display_name"),
+                first_name=row.get("first_name"),
+                last_name=row.get("last_name"),
+                username=row.get("username"),
+                user_id=row.get("user_id"),
+            )
+            telegram_id = self._telegram_id_text(row.get("username"))
+            email = row.get("email") or self._ui_text("unknown_value", language)
+            code = row.get("activation_code") or self._ui_text("unknown_value", language)
+            chunks.append(
+                f"{emoji} #{row['id']} | {html.escape(telegram_id)} | {html.escape(display_name)}\n"
+                f"{html.escape(str(email))} | <code>{html.escape(str(code))}</code>\n"
+                f"{html.escape(self._ui_text('admin_label_status', language))}: {html.escape(str(row.get('status') or '-'))} | "
+                f"{html.escape(self._ui_text('admin_label_time', language))}: {html.escape(self._format_timestamp(row.get('updated_at')))}"
+            )
+        return (
+            self._format_panel(
+                self._ui_text("admin_history_title", language),
+                "\n".join(summary_lines) + "\n\n" + "\n\n".join(chunks),
+                "📋",
+            ),
+            self._history_view_buttons(
+                language=language,
+                page=page_value,
+                total_pages=total_pages,
+                per_page=per_page,
+                filter_key=status_filter,
+                sort_key=sort_key,
+                search_query=search_query,
+            ),
+        )
+
+    def _build_users_view(
+        self,
+        *,
+        language: str,
+        page: int,
+        per_page: int,
+        filter_key: str,
+        sort_key: str,
+        search_query: str,
+    ) -> tuple[str, list[list[Any]]]:
+        normalized_page, offset = self._page_slice(page, per_page)
+        total_items = self.storage.count_users_filtered(
+            filter_key,
+            search_query=search_query,
+        )
+        total_pages = self._page_count(total_items, per_page)
+        page_value = min(normalized_page, total_pages)
+        offset = (page_value - 1) * per_page
+        rows = self.storage.query_users(
+            limit=per_page,
+            offset=offset,
+            filter_mode=filter_key,
+            sort_key=sort_key,
+            search_query=search_query,
+        )
+        filter_label = self._option_label(
+            self._users_filter_options(language),
+            filter_key,
+            self._ui_text("admin_users_filter_all", language),
+        )
+        sort_label = self._option_label(
+            self._users_sort_options(language),
+            sort_key,
+            self._ui_text("admin_users_sort_last_seen", language),
+        )
+        summary_lines = [
+            f"<b>{html.escape(self._ui_text('admin_filter_label', language))}:</b> {html.escape(filter_label)}",
+            f"<b>{html.escape(self._ui_text('admin_sort_label', language))}:</b> {html.escape(sort_label)}",
+        ]
+        if search_query:
+            summary_lines.append(
+                f"<b>{html.escape(self._ui_text('admin_search_label', language))}:</b> <code>{html.escape(search_query)}</code>"
+            )
+        if not rows:
+            return self._format_panel(
+                self._ui_text("admin_users_title", language),
+                "\n".join(
+                    [
+                        *summary_lines,
+                        "",
+                        self._ui_text(
+                            "admin_no_users_search" if search_query else "admin_no_users",
+                            language,
+                        ),
+                    ]
+                ),
+                "👥",
+            ), self._users_view_buttons(
+                language=language,
+                page=1,
+                total_pages=1,
+                per_page=per_page,
+                filter_key=filter_key,
+                sort_key=sort_key,
+                search_query=search_query,
+            )
+
+        chunks: list[str] = []
+        for row in rows:
+            display_name = self._display_name_from_parts(
+                display_name=row.get("display_name"),
+                first_name=row.get("first_name"),
+                last_name=row.get("last_name"),
+                username=row.get("username"),
+                user_id=row.get("user_id"),
+            )
+            username = self._telegram_id_text(row.get("username"))
+            total_orders = int(row.get("total_orders") or 0)
+            last_order_at = self._format_timestamp(row.get("last_order_at"))
+            chunks.append(
+                f"👤 {html.escape(display_name)}\n"
+                f"{html.escape(self._ui_text('admin_label_telegram_id', language))}: {html.escape(username)} | {html.escape(self._ui_text('admin_label_first_seen', language))}: {html.escape(self._format_timestamp(row.get('first_seen_at')))}\n"
+                f"{html.escape(self._ui_text('admin_label_last_seen', language))}: {html.escape(self._format_timestamp(row.get('last_seen_at')))} | "
+                f"{html.escape(self._ui_text('admin_label_total_transactions', language))}: {total_orders} | "
+                f"{html.escape(self._ui_text('admin_label_last_transaction', language))}: {html.escape(last_order_at)}"
+            )
+        return (
+            self._format_panel(
+                self._ui_text("admin_users_title", language),
+                "\n".join(summary_lines) + "\n\n" + "\n\n".join(chunks),
+                "👥",
+            ),
+            self._users_view_buttons(
+                language=language,
+                page=page_value,
+                total_pages=total_pages,
+                per_page=per_page,
+                filter_key=filter_key,
+                sort_key=sort_key,
+                search_query=search_query,
+            ),
+        )
+
+    def _build_notification_settings_text(self, language: str) -> str:
+        return self._format_panel(
+            self._ui_text("admin_notifications_title", language),
+            self._ui_text("admin_notifications_body", language),
+            "🔔",
+        )
+
+    async def _notify_admin_new_user(
+        self,
+        *,
+        user_id: int,
+        username: str,
+        display_name: str,
+    ) -> None:
+        admin_chat_ids = self._admin_notification_targets()
+        if not admin_chat_ids:
+            return
+
+        username_text = self._telegram_id_text(username)
+        for admin_chat_id in admin_chat_ids:
+            admin_language = self._language_for_user(admin_chat_id)
+            body = "\n".join(
+                [
+                    f"<b>{html.escape(self._ui_text('admin_label_bot', admin_language))}:</b> {html.escape(self._bot_label())}",
+                    f"<b>{html.escape(self._ui_text('admin_label_telegram_id', admin_language))}:</b> {html.escape(username_text)}",
+                    f"<b>{html.escape(self._ui_text('admin_label_name', admin_language))}:</b> {html.escape(display_name)}",
+                    f"<b>{html.escape(self._ui_text('admin_label_time', admin_language))}:</b> {html.escape(self._format_timestamp(utc_now_iso()))}",
+                ]
+            )
+            await self._send_message(
+                admin_chat_id,
+                self._format_panel(
+                    self._ui_text("admin_new_user_notification_title", admin_language),
+                    body,
+                    "🆕",
+                ),
+                sticker_kind="info",
+            )
+
+    async def _notify_admin_activation_result(
+        self,
+        *,
+        order_id: int,
+        success: bool,
+        message_text: str = "",
+    ) -> None:
+        setting_key = "notify_activation_success" if success else "notify_activation_failed"
+        if not self.storage.get_setting_bool(setting_key, True):
+            return
+
+        admin_chat_ids = self._admin_notification_targets()
+        if not admin_chat_ids:
+            return
+
+        order = self.storage.get_order(order_id)
+        if not order:
+            return
+        user = self.storage.get_user(int(order["user_id"])) or {}
+        title_key = (
+            "admin_activation_success_notification_title"
+            if success
+            else "admin_activation_failed_notification_title"
+        )
+        title_emoji = "✅" if success else "❌"
+        display_name = self._display_name_from_parts(
+            display_name=user.get("display_name"),
+            first_name=user.get("first_name"),
+            last_name=user.get("last_name"),
+            username=user.get("username"),
+            user_id=order.get("user_id"),
+        )
+        username_text = self._telegram_id_text(user.get("username"))
+        effective_message = self._sanitize_api_text(message_text or str(order.get("task_result") or "")).strip()
+        for admin_chat_id in admin_chat_ids:
+            admin_language = self._language_for_user(admin_chat_id)
+            lines = [
+                f"<b>{html.escape(self._ui_text('admin_label_bot', admin_language))}:</b> {html.escape(self._bot_label())}",
+                f"<b>{html.escape(self._ui_text('admin_label_telegram_id', admin_language))}:</b> {html.escape(username_text)}",
+                f"<b>{html.escape(self._ui_text('admin_label_name', admin_language))}:</b> {html.escape(display_name)}",
+                f"<b>{html.escape(self._ui_text('admin_label_email', admin_language))}:</b> {html.escape(str(order.get('email') or '-'))}",
+                f"<b>{html.escape(self._ui_text('admin_label_activation_code', admin_language))}:</b> <code>{html.escape(str(order.get('activation_code') or '-'))}</code>",
+                f"<b>{html.escape(self._ui_text('admin_label_time', admin_language))}:</b> {html.escape(self._format_timestamp(order.get('updated_at')))}",
+                f"<b>{html.escape(self._ui_text('admin_label_status', admin_language))}:</b> {html.escape(str(order.get('status') or '-'))}",
+            ]
+            if effective_message:
+                lines.append(
+                    f"<b>{html.escape(self._ui_text('admin_label_message', admin_language))}:</b> {html.escape(effective_message[:1000])}"
+                )
+            await self._send_message(
+                admin_chat_id,
+                self._format_panel(
+                    self._ui_text(title_key, admin_language),
+                    "\n".join(lines),
+                    title_emoji,
+                ),
+                sticker_kind="info" if success else "warning",
+            )
+
+    async def send_admin_panel(
+        self,
+        user_id: int,
+        *,
+        responder: Any | None = None,
+    ) -> None:
+        language = self._language_for_user(user_id)
+        text = self._build_admin_panel_text(language)
+        if responder is None:
+            await self._send_message(
+                user_id,
+                text,
+                buttons=self._admin_panel_buttons(language),
+                sticker_kind="info",
+            )
+            return
+        await self._reply(
+            user_id,
+            responder,
+            text,
+            buttons=self._admin_panel_buttons(language),
+            sticker_kind="info",
+        )
+
+    async def send_notification_settings_panel(self, user_id: int) -> None:
+        language = self._language_for_user(user_id)
+        await self._send_message(
+            user_id,
+            self._build_notification_settings_text(language),
+            buttons=self._notification_settings_buttons(language),
+            sticker_kind="info",
+        )
+
+    async def send_admin_search_prompt(self, user_id: int, view_kind: str) -> None:
+        language = self._language_for_user(user_id)
+        context = self._get_admin_view_context(user_id, view_kind)
+        self._save_admin_view_context(
+            user_id,
+            view_kind,
+            page=context["page"],
+            per_page=context["per_page"],
+            filter_key=context["filter_key"],
+            sort_key=context["sort_key"],
+            search_query=context["search_query"],
+            state_name=self._admin_search_state_name(view_kind),
+        )
+        title_key = (
+            "admin_history_search_prompt_title"
+            if view_kind == "history"
+            else "admin_users_search_prompt_title"
+        )
+        body_key = (
+            "admin_history_search_prompt_body"
+            if view_kind == "history"
+            else "admin_users_search_prompt_body"
+        )
+        await self._send_message(
+            user_id,
+            self._format_panel(
+                self._ui_text(title_key, language),
+                self._ui_text(body_key, language),
+                "🔎" if view_kind == "history" else "🔍",
+            ),
+            buttons=[[
+                Button.inline(
+                    f"⬅️ {self._ui_text('admin_back_button_text', language)}",
+                    data=b"admin:history" if view_kind == "history" else b"admin:users",
+                )
+            ]],
+            sticker_kind="info",
+        )
+
+    async def _show_admin_orders_view(
+        self,
+        event: Any,
+        *,
+        user_id: int,
+        language: str,
+        page: int,
+        per_page: int,
+        status_filter: str,
+        sort_key: str,
+        search_query: str,
+    ) -> None:
+        self._save_admin_view_context(
+            user_id,
+            "history",
+            page=page,
+            per_page=per_page,
+            filter_key=status_filter,
+            sort_key=sort_key,
+            search_query=search_query,
+            state_name="idle",
+        )
+        text, buttons = self._build_orders_view(
+            language=language,
+            page=page,
+            per_page=per_page,
+            status_filter=status_filter,
+            sort_key=sort_key,
+            search_query=search_query,
+        )
+        await self._edit_admin_message(
+            event,
+            text,
+            buttons=buttons,
+        )
+
+    async def _show_admin_users_view(
+        self,
+        event: Any,
+        *,
+        user_id: int,
+        language: str,
+        page: int,
+        per_page: int,
+        filter_key: str,
+        sort_key: str,
+        search_query: str,
+    ) -> None:
+        self._save_admin_view_context(
+            user_id,
+            "users",
+            page=page,
+            per_page=per_page,
+            filter_key=filter_key,
+            sort_key=sort_key,
+            search_query=search_query,
+            state_name="idle",
+        )
+        text, buttons = self._build_users_view(
+            language=language,
+            page=page,
+            per_page=per_page,
+            filter_key=filter_key,
+            sort_key=sort_key,
+            search_query=search_query,
+        )
+        await self._edit_admin_message(
+            event,
+            text,
+            buttons=buttons,
+        )
+
+    async def _reply_with_admin_view(
+        self,
+        user_id: int,
+        responder: Any,
+        *,
+        view_kind: str,
+        language: str,
+        page: int,
+        per_page: int,
+        filter_key: str,
+        sort_key: str,
+        search_query: str,
+    ) -> None:
+        self._save_admin_view_context(
+            user_id,
+            view_kind,
+            page=page,
+            per_page=per_page,
+            filter_key=filter_key,
+            sort_key=sort_key,
+            search_query=search_query,
+            state_name="idle",
+        )
+        if view_kind == "history":
+            text, buttons = self._build_orders_view(
+                language=language,
+                page=page,
+                per_page=per_page,
+                status_filter=filter_key,
+                sort_key=sort_key,
+                search_query=search_query,
+            )
+        else:
+            text, buttons = self._build_users_view(
+                language=language,
+                page=page,
+                per_page=per_page,
+                filter_key=filter_key,
+                sort_key=sort_key,
+                search_query=search_query,
+            )
+        await self._reply(
+            user_id,
+            responder,
+            text,
+            buttons=buttons,
+            sticker_kind="info",
+        )
+
+    async def send_orders_export(self, user_id: int) -> None:
+        language = self._language_for_user(user_id)
+        rows = self.storage.list_all_completed_orders()
+        export_rows = [
+            [
+                row["id"],
+                row["status"],
+                row["user_id"],
+                self._display_name_from_parts(
+                    display_name=row.get("display_name"),
+                    first_name=row.get("first_name"),
+                    last_name=row.get("last_name"),
+                    username=row.get("username"),
+                    user_id=row.get("user_id"),
+                ),
+                f"@{row['username']}" if row.get("username") else "",
+                row.get("email") or "",
+                row.get("activation_code") or "",
+                row.get("app_name") or "",
+                row.get("product_name") or "",
+                self._format_timestamp(row.get("created_at")),
+                self._format_timestamp(row.get("updated_at")),
+                row.get("task_id") or "",
+            ]
+            for row in rows
+        ]
+        export_path = build_export_path(
+            self.settings.exports_path,
+            f"activations_bot{self.settings.bot_index}",
+        )
+        export_activation_history_xlsx(export_path, export_rows)
+        await self.client.send_file(
+            user_id,
+            str(export_path),
+            caption=self._ui_text("admin_export_orders_caption", language),
+        )
+
+    async def send_users_export(self, user_id: int) -> None:
+        language = self._language_for_user(user_id)
+        rows = self.storage.list_all_users()
+        export_rows = [
+            [
+                row["user_id"],
+                self._display_name_from_parts(
+                    display_name=row.get("display_name"),
+                    first_name=row.get("first_name"),
+                    last_name=row.get("last_name"),
+                    username=row.get("username"),
+                    user_id=row.get("user_id"),
+                ),
+                f"@{row['username']}" if row.get("username") else "",
+                "Yes" if int(row.get("is_admin") or 0) else "No",
+                self._format_timestamp(row.get("first_seen_at")),
+                self._format_timestamp(row.get("last_seen_at")),
+            ]
+            for row in rows
+        ]
+        export_path = build_export_path(
+            self.settings.exports_path,
+            f"users_bot{self.settings.bot_index}",
+        )
+        export_users_xlsx(export_path, export_rows)
+        await self.client.send_file(
+            user_id,
+            str(export_path),
+            caption=self._ui_text("admin_export_users_caption", language),
+        )
 
     async def _send_optional_sticker(self, user_id: int, kind: str | None) -> None:
         return
@@ -311,6 +1695,30 @@ class ActivationBotApp:
             parse_mode="html",
         )
 
+    async def _edit_admin_message(
+        self,
+        event: Any,
+        text: str,
+        *,
+        buttons: Any | None = None,
+        link_preview: bool = True,
+    ) -> None:
+        try:
+            await event.edit(
+                text,
+                buttons=buttons,
+                link_preview=link_preview,
+                parse_mode="html",
+            )
+        except Exception:
+            await self._send_message(
+                event.sender_id,
+                text,
+                buttons=buttons,
+                link_preview=link_preview,
+                sticker_kind="info",
+            )
+
     async def _delete_message(self, user_id: int, message: Any | None) -> None:
         if message is None:
             return
@@ -347,10 +1755,14 @@ class ActivationBotApp:
         if not getattr(event, "is_private", False):
             return
         try:
+            await self._register_user_activity(event)
             await handler(event)
         except Exception as exc:  # pragma: no cover - runtime fallback
             user_id = getattr(event, "sender_id", None)
-            self.logger.exception("Unhandled bot error for user %s", user_id)
+            self.logger.exception(
+                "Unhandled bot error for user=%s",
+                self._log_user_identity(user_id),
+            )
             self.storage.log_event(
                 user_id=user_id,
                 event_type="unhandled_exception",
@@ -552,7 +1964,10 @@ class ActivationBotApp:
                 event_type="start_language_selection",
                 details="language_required",
             )
-            self.logger.info("start_language_selection user_id=%s", user_id)
+            self.logger.info(
+                "start_language_selection user=%s",
+                self._log_user_identity(user_id),
+            )
             await self._send_language_selector(user_id, responder=event.respond, language="fa")
             return
 
@@ -572,8 +1987,39 @@ class ActivationBotApp:
 
         await self.reset_user_flow(user_id, force=True)
         self.storage.log_event(user_id=user_id, event_type="start", details="start")
-        self.logger.info("start user_id=%s", user_id)
+        self.logger.info("start user=%s", self._log_user_identity(user_id))
         await self._send_main_menu(user_id, responder=event.respond)
+
+    async def handle_admin_search_input(self, event: Any, view_kind: str) -> None:
+        user_id = event.sender_id
+        state = self.storage.get_state(user_id)
+        language = self._language_from_state(state) or "fa"
+        search_query = (event.raw_text or "").strip()
+        context = self._get_admin_view_context(user_id, view_kind)
+
+        self.storage.log_event(
+            user_id=user_id,
+            event_type="admin_search_submitted",
+            details={
+                "view_kind": view_kind,
+                "search_query": search_query,
+                "filter_key": context["filter_key"],
+                "sort_key": context["sort_key"],
+                "per_page": context["per_page"],
+            },
+        )
+
+        await self._reply_with_admin_view(
+            user_id,
+            event.respond,
+            view_kind=view_kind,
+            language=language,
+            page=1,
+            per_page=context["per_page"],
+            filter_key=context["filter_key"],
+            sort_key=context["sort_key"],
+            search_query=search_query,
+        )
 
     async def handle_message(self, event: Any) -> None:
         raw_text = event.raw_text or ""
@@ -584,6 +2030,18 @@ class ActivationBotApp:
         user_id = event.sender_id
         state = self.storage.get_state(user_id)
         language = self._language_from_state(state)
+
+        if self._is_admin_command(text):
+            await self.handle_admin_command(user_id, responder=event.respond)
+            return
+
+        if state["state"] == self._admin_search_state_name("history") and self._is_admin_user(user_id):
+            await self.handle_admin_search_input(event, "history")
+            return
+
+        if state["state"] == self._admin_search_state_name("users") and self._is_admin_user(user_id):
+            await self.handle_admin_search_input(event, "users")
+            return
 
         if text in self._button_variants("support"):
             await self.handle_support(user_id, responder=event.respond)
@@ -695,6 +2153,10 @@ class ActivationBotApp:
         state = self.storage.get_state(user_id)
         language = self._language_from_state(state) or "fa"
 
+        if data.startswith(b"admin:"):
+            await self.handle_admin_callback(event, data)
+            return
+
         if data.startswith(b"set_language:"):
             selected = data.split(b":", 1)[1].decode("utf-8", errors="ignore")
             language = "en" if selected == "en" else "fa"
@@ -777,6 +2239,246 @@ class ActivationBotApp:
 
         await event.answer(self._ui_text("invalid_request", language), alert=True)
 
+    async def handle_admin_callback(self, event: Any, data: bytes) -> None:
+        user_id = event.sender_id
+        if not self._is_admin_user(user_id):
+            language = self._language_for_user(user_id)
+            await event.answer(self._ui_text("admin_unauthorized", language), alert=True)
+            return
+
+        language = self._language_for_user(user_id)
+        if data == b"admin:noop":
+            await event.answer()
+            return
+
+        if data == b"admin:panel":
+            self.storage.save_state(user_id, state="idle")
+            await event.answer(self._ui_text("admin_title", language))
+            await self._edit_admin_message(
+                event,
+                self._build_admin_panel_text(language),
+                buttons=self._admin_panel_buttons(language),
+            )
+            return
+
+        if data == b"admin:history":
+            self._save_admin_view_context(
+                user_id,
+                "history",
+                page=1,
+                per_page=20,
+                filter_key="all",
+                sort_key="newest",
+                search_query="",
+                state_name="idle",
+            )
+            await event.answer(self._ui_text("admin_history_title", language))
+            await self._show_admin_orders_view(
+                event,
+                user_id=user_id,
+                language=language,
+                page=1,
+                per_page=20,
+                status_filter="all",
+                sort_key="newest",
+                search_query="",
+            )
+            return
+
+        if data == b"admin:users":
+            self._save_admin_view_context(
+                user_id,
+                "users",
+                page=1,
+                per_page=20,
+                filter_key="all",
+                sort_key="last_seen",
+                search_query="",
+                state_name="idle",
+            )
+            await event.answer(self._ui_text("admin_users_title", language))
+            await self._show_admin_users_view(
+                event,
+                user_id=user_id,
+                language=language,
+                page=1,
+                per_page=20,
+                filter_key="all",
+                sort_key="last_seen",
+                search_query="",
+            )
+            return
+
+        if data == b"admin:search_orders":
+            await event.answer(self._ui_text("admin_search_orders_button_text", language))
+            await self.send_admin_search_prompt(user_id, "history")
+            return
+
+        if data == b"admin:search_users":
+            await event.answer(self._ui_text("admin_search_users_button_text", language))
+            await self.send_admin_search_prompt(user_id, "users")
+            return
+
+        if data == b"admin:notifications":
+            self.storage.save_state(user_id, state="idle")
+            await event.answer(self._ui_text("admin_notifications_title", language))
+            await self._edit_admin_message(
+                event,
+                self._build_notification_settings_text(language),
+                buttons=self._notification_settings_buttons(language),
+            )
+            return
+
+        if data == b"admin:clear_search:history":
+            context = self._get_admin_view_context(user_id, "history")
+            await event.answer(self._ui_text("admin_clear_search_button_text", language))
+            await self._show_admin_orders_view(
+                event,
+                user_id=user_id,
+                language=language,
+                page=1,
+                per_page=context["per_page"],
+                status_filter=context["filter_key"],
+                sort_key=context["sort_key"],
+                search_query="",
+            )
+            return
+
+        if data == b"admin:clear_search:users":
+            context = self._get_admin_view_context(user_id, "users")
+            await event.answer(self._ui_text("admin_clear_search_button_text", language))
+            await self._show_admin_users_view(
+                event,
+                user_id=user_id,
+                language=language,
+                page=1,
+                per_page=context["per_page"],
+                filter_key=context["filter_key"],
+                sort_key=context["sort_key"],
+                search_query="",
+            )
+            return
+
+        if data.startswith(b"admin:toggle:"):
+            key = data.decode("utf-8", errors="ignore").split(":", 2)[2]
+            toggles = self.storage.get_notification_settings()
+            if key not in toggles:
+                await event.answer(self._ui_text("invalid_request", language), alert=True)
+                return
+            new_value = not toggles[key]
+            self.storage.set_setting_bool(key, new_value)
+            self.storage.log_event(
+                user_id=user_id,
+                event_type="admin_notification_toggled",
+                details={"setting": key, "enabled": new_value},
+            )
+            await event.answer(
+                f"{self._ui_text('admin_status_on', language) if new_value else self._ui_text('admin_status_off', language)}"
+            )
+            await self._edit_admin_message(
+                event,
+                self._build_notification_settings_text(language),
+                buttons=self._notification_settings_buttons(language),
+            )
+            return
+
+        if data.startswith(b"admin:view:"):
+            view_state = self._parse_admin_view_data(data)
+            if not view_state:
+                await event.answer(self._ui_text("invalid_request", language), alert=True)
+                return
+            await event.answer()
+            if view_state["view_kind"] == "history":
+                context = self._get_admin_view_context(user_id, "history")
+                await self._show_admin_orders_view(
+                    event,
+                    user_id=user_id,
+                    language=language,
+                    page=view_state["page"],
+                    per_page=view_state["per_page"],
+                    status_filter=view_state["filter_key"],
+                    sort_key=view_state["sort_key"],
+                    search_query=context["search_query"],
+                )
+                return
+            if view_state["view_kind"] == "users":
+                context = self._get_admin_view_context(user_id, "users")
+                await self._show_admin_users_view(
+                    event,
+                    user_id=user_id,
+                    language=language,
+                    page=view_state["page"],
+                    per_page=view_state["per_page"],
+                    filter_key=view_state["filter_key"],
+                    sort_key=view_state["sort_key"],
+                    search_query=context["search_query"],
+                )
+                return
+            await event.answer(self._ui_text("invalid_request", language), alert=True)
+            return
+
+        if data == b"admin:export_orders":
+            await event.answer(self._ui_text("admin_export_orders_button_text", language))
+            await self.send_orders_export(user_id)
+            return
+
+        if data == b"admin:export_users":
+            await event.answer(self._ui_text("admin_export_users_button_text", language))
+            await self.send_users_export(user_id)
+            return
+
+        if data == b"admin:close":
+            await event.answer(self._ui_text("admin_closed", language))
+            await self._edit_admin_message(
+                event,
+                self._format_panel(
+                    self._ui_text("admin_title", language),
+                    self._ui_text("admin_closed", language),
+                    "🧹",
+                ),
+            )
+            return
+
+        await event.answer(self._ui_text("invalid_request", language), alert=True)
+
+    async def handle_admin_command(self, user_id: int, *, responder: Any | None = None) -> None:
+        if not self._is_admin_user(user_id):
+            language = self._language_for_user(user_id) or "fa"
+            if responder is None:
+                await self._send_message(
+                    user_id,
+                    self._format_panel(
+                        self._ui_text("error_title", language),
+                        self._ui_text("admin_unauthorized", language),
+                        "⛔️",
+                    ),
+                    sticker_kind="warning",
+                )
+                return
+            await self._reply(
+                user_id,
+                responder,
+                self._format_panel(
+                    self._ui_text("error_title", language),
+                    self._ui_text("admin_unauthorized", language),
+                    "⛔️",
+                ),
+                sticker_kind="warning",
+            )
+            return
+
+        current_state = self.storage.get_state(user_id)
+        if not self._language_from_state(current_state):
+            self.storage.save_state(user_id, language="fa")
+        self.storage.save_state(user_id, state="idle")
+        self.storage.set_admin_chat_id(user_id)
+        self.storage.log_event(
+            user_id=user_id,
+            event_type="admin_panel_opened",
+            details={"bot_index": self.settings.bot_index},
+        )
+        await self.send_admin_panel(user_id, responder=responder)
+
     async def handle_support(self, user_id: int, *, responder: Any | None = None) -> None:
         state = self.storage.get_state(user_id)
         language = self._language_for_user(user_id, state)
@@ -856,7 +2558,10 @@ class ActivationBotApp:
             event_type="activation_flow_started",
             details="waiting_activation_code",
         )
-        self.logger.info("activation_flow_started user_id=%s", user_id)
+        self.logger.info(
+            "activation_flow_started user=%s",
+            self._log_user_identity(user_id),
+        )
         text = self._format_panel(
             self._ui_text("activation_title", language),
             self._render_key("request_activation_code_message", language=language),
@@ -937,16 +2642,16 @@ class ActivationBotApp:
             details={"activation_code": activation_code},
         )
         self.logger.info(
-            "activation_code_received user_id=%s code=%s",
-            user_id,
+            "activation_code_received user=%s code=%s",
+            self._log_user_identity(user_id),
             self._mask_value(activation_code, keep_start=8, keep_end=6),
         )
         try:
             payload = await asyncio.to_thread(self.api.check_activation_code, activation_code)
         except ApiError as exc:
             self.logger.warning(
-                "activation_check_failed user_id=%s path=%s status=%s request_id=%s body=%r",
-                user_id,
+                "activation_check_failed user=%s path=%s status=%s request_id=%s body=%r",
+                self._log_user_identity(user_id),
                 exc.path,
                 exc.status_code,
                 exc.request_id,
@@ -1022,8 +2727,8 @@ class ActivationBotApp:
             details={**payload, "resolved_activation_code": resolved_activation_code},
         )
         self.logger.info(
-            "activation_code_valid user_id=%s product=%s app=%s code=%s",
-            user_id,
+            "activation_code_valid user=%s product=%s app=%s code=%s",
+            self._log_user_identity(user_id),
             product_name,
             app_name,
             self._mask_value(resolved_activation_code, keep_start=8, keep_end=6),
@@ -1067,8 +2772,8 @@ class ActivationBotApp:
             details={"fragment_count": len(fragments)},
         )
         self.logger.info(
-            "session_fragment_received user_id=%s fragment_count=%s",
-            user_id,
+            "session_fragment_received user=%s fragment_count=%s",
+            self._log_user_identity(user_id),
             len(fragments),
         )
 
@@ -1103,8 +2808,8 @@ class ActivationBotApp:
             return
         except Exception as exc:  # pragma: no cover - runtime fallback
             self.logger.exception(
-                "session_finalize_unhandled user_id=%s error=%s",
-                user_id,
+                "session_finalize_unhandled user=%s error=%s",
+                self._log_user_identity(user_id),
                 exc,
             )
             self.storage.log_event(
@@ -1158,8 +2863,8 @@ class ActivationBotApp:
                 details={"error": str(exc), "raw_session": raw_session},
             )
             self.logger.warning(
-                "session_invalid user_id=%s error=%s",
-                user_id,
+                "session_invalid user=%s error=%s",
+                self._log_user_identity(user_id),
                 exc,
             )
             await self._send_message(
@@ -1192,8 +2897,8 @@ class ActivationBotApp:
                 details={"error": str(exc), "raw_session": raw_session},
             )
             self.logger.exception(
-                "session_finalize_error user_id=%s error=%s",
-                user_id,
+                "session_finalize_error user=%s error=%s",
+                self._log_user_identity(user_id),
                 exc,
             )
             await self._send_message(
@@ -1237,8 +2942,8 @@ class ActivationBotApp:
             },
         )
         self.logger.info(
-            "session_valid user_id=%s email=%s plan_type=%s",
-            user_id,
+            "session_valid user=%s email=%s plan_type=%s",
+            self._log_user_identity(user_id),
             session_data.email,
             session_data.plan_type,
         )
@@ -1313,8 +3018,8 @@ class ActivationBotApp:
             details={"order_id": order_id},
         )
         self.logger.info(
-            "order_processing_started user_id=%s order_id=%s product=%s email=%s",
-            user_id,
+            "order_processing_started user=%s order_id=%s product=%s email=%s",
+            self._log_user_identity(user_id),
             order_id,
             state["activation_product_name"],
             state["session_email"],
@@ -1370,8 +3075,8 @@ class ActivationBotApp:
                 },
             )
             self.logger.info(
-                "order_submit_payload user_id=%s order_id=%s user_source=raw_session user_length=%s code=%s",
-                user_id,
+                "order_submit_payload user=%s order_id=%s user_source=raw_session user_length=%s code=%s",
+                self._log_user_identity(user_id),
                 order_id,
                 len(outstock_user),
                 self._mask_value(activation_code, keep_start=8, keep_end=6),
@@ -1398,8 +3103,8 @@ class ActivationBotApp:
                 },
             )
             self.logger.info(
-                "order_submitted user_id=%s order_id=%s task_id=%s user_source=raw_session",
-                user_id,
+                "order_submitted user=%s order_id=%s task_id=%s user_source=raw_session",
+                self._log_user_identity(user_id),
                 order_id,
                 task_id,
             )
@@ -1422,8 +3127,8 @@ class ActivationBotApp:
                         details={"order_id": order_id, "error": exc.to_dict()},
                     )
                     self.logger.warning(
-                        "order_poll_error user_id=%s order_id=%s path=%s status=%s request_id=%s body=%r",
-                        user_id,
+                        "order_poll_error user=%s order_id=%s path=%s status=%s request_id=%s body=%r",
+                        self._log_user_identity(user_id),
                         order_id,
                         exc.path,
                         exc.status_code,
@@ -1442,6 +3147,11 @@ class ActivationBotApp:
                             "⚠️",
                         ),
                         sticker_kind="warning",
+                    )
+                    await self._notify_admin_activation_result(
+                        order_id=order_id,
+                        success=False,
+                        message_text=str(exc),
                     )
                     await self.finish_user_flow(user_id)
                     return
@@ -1466,13 +3176,18 @@ class ActivationBotApp:
                     details={"order_id": order_id, "result": result},
                 )
                 self.logger.info(
-                    "order_completed user_id=%s order_id=%s success=%s pending=%s",
-                    user_id,
+                    "order_completed user=%s order_id=%s success=%s pending=%s",
+                    self._log_user_identity(user_id),
                     order_id,
                     result.get("success"),
                     result.get("pending"),
                 )
                 if result.get("success"):
+                    await self._notify_admin_activation_result(
+                        order_id=order_id,
+                        success=True,
+                        message_text=str(result.get("message") or ""),
+                    )
                     await self._send_message(
                         user_id,
                         self._build_order_result_panel(
@@ -1492,6 +3207,11 @@ class ActivationBotApp:
                     user_id,
                     state="waiting_retry_order",
                     order_id=order_id,
+                )
+                await self._notify_admin_activation_result(
+                    order_id=order_id,
+                    success=False,
+                    message_text=str(result.get("message") or result.get("error") or ""),
                 )
                 await self._send_message(
                     user_id,
@@ -1514,7 +3234,11 @@ class ActivationBotApp:
                 event_type="order_timeout",
                 details={"order_id": order_id},
             )
-            self.logger.warning("order_timeout user_id=%s order_id=%s", user_id, order_id)
+            self.logger.warning(
+                "order_timeout user=%s order_id=%s",
+                self._log_user_identity(user_id),
+                order_id,
+            )
             await self._send_message(
                 user_id,
                 self._format_panel(
@@ -1523,6 +3247,11 @@ class ActivationBotApp:
                     "⚠️",
                 ),
                 sticker_kind="warning",
+            )
+            await self._notify_admin_activation_result(
+                order_id=order_id,
+                success=False,
+                message_text="timeout",
             )
             await self.finish_user_flow(user_id)
         except ApiError as exc:
@@ -1537,8 +3266,8 @@ class ActivationBotApp:
                 details={"order_id": order_id, "error": exc.to_dict()},
             )
             self.logger.warning(
-                "order_submit_error user_id=%s order_id=%s path=%s status=%s request_id=%s body=%r",
-                user_id,
+                "order_submit_error user=%s order_id=%s path=%s status=%s request_id=%s body=%r",
+                self._log_user_identity(user_id),
                 order_id,
                 exc.path,
                 exc.status_code,
@@ -1558,9 +3287,17 @@ class ActivationBotApp:
                 ),
                 sticker_kind="warning",
             )
+            await self._notify_admin_activation_result(
+                order_id=order_id,
+                success=False,
+                message_text=str(exc),
+            )
             await self.finish_user_flow(user_id)
         except Exception as exc:  # pragma: no cover - runtime fallback
-            self.logger.exception("Unexpected order processing error for user %s", user_id)
+            self.logger.exception(
+                "Unexpected order processing error for user=%s",
+                self._log_user_identity(user_id),
+            )
             self.storage.update_order(
                 order_id,
                 status="unexpected_error",
@@ -1579,6 +3316,11 @@ class ActivationBotApp:
                     "⚠️",
                 ),
                 sticker_kind="warning",
+            )
+            await self._notify_admin_activation_result(
+                order_id=order_id,
+                success=False,
+                message_text=str(exc),
             )
             await self.finish_user_flow(user_id)
         finally:

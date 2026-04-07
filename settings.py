@@ -73,10 +73,12 @@ class Settings:
     telegram_api_hash: str
     api_base_url: str
     product_id: str
+    admin_username: str
     support_username: str
     guide_link: str
     database_path: Path
     log_path: Path
+    exports_path: Path
     telethon_session_name: str
     session_window_seconds: int
     session_max_messages: int
@@ -112,6 +114,24 @@ class Settings:
     in_progress_message: str
     return_to_menu_message: str
     bot_index: int = 1
+    super_admin_username: str = ""
+
+    @staticmethod
+    def _split_usernames(value: str) -> tuple[str, ...]:
+        items = [
+            part.strip()
+            for part in str(value or "").split(",")
+            if part and part.strip()
+        ]
+        return tuple(items)
+
+    @property
+    def admin_usernames(self) -> tuple[str, ...]:
+        return self._split_usernames(self.admin_username)
+
+    @property
+    def super_admin_usernames(self) -> tuple[str, ...]:
+        return self._split_usernames(self.super_admin_username)
 
     @staticmethod
     def _resolve_path(value: str) -> Path:
@@ -261,25 +281,33 @@ class Settings:
         shared = cls._shared_kwargs()
         bot_count = cls._env_int("BOT_COUNT", 0)
         suffix_outputs = bot_count > 1
+        global_super_admin_username = cls._env_str(
+            "SUPER_ADMIN_USERNAME",
+            cls._env_str("ADMIN_USERNAME", "@DexAshkan"),
+        )
         global_support = cls._env_str("SUPPORT_USERNAME", "@dexashkan")
         global_guide_link = cls._env_str("GUIDE_LINK", "https://t.me/LicenseCT/2")
         base_database = cls._env_str("DATABASE_PATH", "bot_data.sqlite3")
         base_log = cls._env_str("LOG_PATH", "bot.log")
+        base_exports = cls._env_str("EXPORTS_PATH", "exports")
         base_session = cls._env_str("TELETHON_SESSION_NAME", "telethon_bot")
 
         def build_settings(bot_index: int, *, multi_mode: bool) -> Settings:
             prefix = f"BOT_{bot_index}_"
             token_key = f"{prefix}TOKEN"
+            admin_key = f"{prefix}ADMIN_USERNAME"
             support_key = f"{prefix}SUPPORT_USERNAME"
             guide_key = f"{prefix}GUIDE_LINK"
             db_key = f"{prefix}DATABASE_PATH"
             log_key = f"{prefix}LOG_PATH"
+            exports_key = f"{prefix}EXPORTS_PATH"
             session_key = f"{prefix}TELETHON_SESSION_NAME"
 
             if multi_mode:
                 token = cls._env_str(token_key, required=True)
             else:
                 token = cls._env_str("TELEGRAM_BOT_TOKEN", required=True)
+            admin_username = cls._env_str(admin_key, "")
             support_username = cls._env_str(support_key, global_support)
             guide_link = cls._env_str(guide_key, global_guide_link)
 
@@ -291,6 +319,9 @@ class Settings:
             default_log = (
                 cls._suffix_text(base_log, bot_index) if suffix_outputs else base_log
             )
+            default_exports = (
+                f"{base_exports}/bot{bot_index}" if suffix_outputs else base_exports
+            )
             default_session = (
                 cls._suffix_text(base_session, bot_index)
                 if suffix_outputs
@@ -299,10 +330,13 @@ class Settings:
 
             return cls(
                 telegram_bot_token=token,
+                admin_username=admin_username,
                 support_username=support_username,
                 guide_link=guide_link,
+                super_admin_username=global_super_admin_username,
                 database_path=cls._resolve_path(cls._env_str(db_key, default_database)),
                 log_path=cls._resolve_path(cls._env_str(log_key, default_log)),
+                exports_path=cls._resolve_path(cls._env_str(exports_key, default_exports)),
                 telethon_session_name=cls._env_str(session_key, default_session),
                 bot_index=bot_index,
                 **shared,
