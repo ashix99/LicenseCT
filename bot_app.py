@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 try:
@@ -24,6 +25,7 @@ from receipt_api import ApiError, ReceiptApiClient
 from session_data import (
     SessionData,
     SessionValidationError,
+    combine_session_fragments,
     extract_outstock_user,
 )
 from settings import BASE_DIR, Settings
@@ -77,9 +79,10 @@ class ActivationBotApp:
             "submitting_order_notice": "در حال ثبت سفارش...",
             "invalid_request": "درخواست نامعتبر است.",
             "language_button_text": "تغییر زبان",
-            "change_account_button_text": "عوض کردن اکانت",
+            "change_account_button_text": "عوض کردن سشن اکانت",
             "retry_button_text": "تلاش دوباره",
             "change_account_notice": "لطفا سشن اکانت جدید را ارسال کنید.",
+            "retry_now_hint": "لطفا دوباره تلاش کنید.",
             "unknown_value": "نامشخص",
             "success_result_title": "فعالسازی با موفقیت انجام شد",
             "failed_result_title": "فعالسازی ناموفق بود",
@@ -93,21 +96,43 @@ class ActivationBotApp:
             "result_message": "پیام",
             "result_note": "نکته",
             "result_api_details": "جزئیات API",
+            "history_button_text": "تاریخچه سفارشات",
+            "user_history_title": "تاریخچه سفارشات شما",
+            "user_no_orders": "هنوز سفارشی برای شما ثبت نشده است.",
             "admin_title": "پنل ادمین",
             "admin_panel_body": "ربات: {bot_label}\nکاربران ثبت‌شده: {user_count}\nفعالسازی‌های ثبت‌شده: {order_count}\nنوتیف کاربر جدید: {notify_new_user}\nنوتیف فعالسازی موفق: {notify_activation_success}\nنوتیف فعالسازی ناموفق: {notify_activation_failed}",
             "admin_unauthorized": "این بخش فقط برای ادمین ربات در دسترس است.",
+            "admin_super_admin_only": "این بخش فقط برای سوپر ادمین در دسترس است.",
             "admin_history_button_text": "تاریخچه فعالسازی",
             "admin_users_button_text": "کاربرها",
             "admin_search_orders_button_text": "جستجوی فعالسازی",
             "admin_search_users_button_text": "جستجوی کاربر",
             "admin_clear_search_button_text": "پاک کردن جستجو",
             "admin_notifications_button_text": "مدیریت نوتیف‌ها",
+            "admin_runtime_settings_button_text": "تنظیمات زنده",
+            "admin_broadcast_button_text": "پیام همگانی",
             "admin_export_orders_button_text": "اکسل فعالسازی‌ها",
             "admin_export_users_button_text": "اکسل کاربرها",
             "admin_refresh_button_text": "بروزرسانی",
             "admin_close_button_text": "بستن پنل",
             "admin_notifications_title": "مدیریت نوتیف‌ها",
             "admin_notifications_body": "وضعیت فعلی نوتیف‌های این ربات را از دکمه‌های زیر تغییر بدهید.",
+            "admin_runtime_settings_title": "تنظیمات زنده",
+            "admin_runtime_settings_body": "این بخش تنظیمات runtime را بدون ری‌استارت تغییر می‌دهد.\n\nمقادیر مشترک: <code>support_username</code>، <code>guide_link</code>، <code>api_base_url</code>، <code>product_id</code>\nمقادیر عددی: <code>session_window_seconds</code>، <code>session_max_messages</code>، <code>outstock_poll_seconds</code>، <code>outstock_timeout_seconds</code>\nمتن‌ها: به‌صورت <code>field.fa=...</code> یا <code>field.en=...</code>\n\nمثال:\n<code>request_session_message.fa=لطفا سشن اکانت را به صورت فایل یا متن عادی ارسال کنید.</code>\n<code>support_username=@DexAshkan</code>\n\nنکته: token ربات و اطلاعات startup همچنان به ری‌استارت نیاز دارند.",
+            "admin_runtime_edit_button_text": "ویرایش تنظیم",
+            "admin_runtime_reset_button_text": "حذف override",
+            "admin_runtime_prompt_title": "ویرایش تنظیم",
+            "admin_runtime_prompt_body": "مقدار جدید را به‌صورت <code>key=value</code> ارسال کنید.",
+            "admin_runtime_reset_prompt_title": "حذف override",
+            "admin_runtime_reset_prompt_body": "کلیدی را که می‌خواهید حذف شود ارسال کنید. برای متن‌ها از <code>field.fa</code> یا <code>field.en</code> استفاده کنید.",
+            "admin_runtime_saved": "تنظیم ذخیره شد.",
+            "admin_runtime_reset_done": "override حذف شد.",
+            "admin_runtime_invalid_key": "کلید ارسال‌شده برای ویرایش runtime معتبر نیست.",
+            "admin_runtime_invalid_value": "مقدار ارسال‌شده برای این کلید معتبر نیست.",
+            "admin_broadcast_title": "پیام همگانی",
+            "admin_broadcast_body": "متن پیام همگانی را ارسال کنید. این پیام برای همه کاربرهای این ربات ارسال می‌شود.",
+            "admin_broadcast_started": "پیام همگانی در حال ارسال است.",
+            "admin_broadcast_done": "پیام همگانی ارسال شد. موفق: {sent_count} | ناموفق: {failed_count}",
             "admin_toggle_new_user": "نوتیف کاربر جدید",
             "admin_toggle_activation_success": "نوتیف فعالسازی موفق",
             "admin_toggle_activation_failed": "نوتیف فعالسازی ناموفق",
@@ -133,6 +158,7 @@ class ActivationBotApp:
             "admin_label_name": "نام",
             "admin_label_username": "یوزرنیم",
             "admin_label_email": "ایمیل",
+            "admin_label_product": "محصول",
             "admin_label_activation_code": "کد فعالسازی",
             "admin_label_time": "زمان",
             "admin_label_status": "وضعیت",
@@ -201,9 +227,10 @@ class ActivationBotApp:
             "submitting_order_notice": "Submitting order...",
             "invalid_request": "Invalid request.",
             "language_button_text": "Change Language",
-            "change_account_button_text": "Change Account",
+            "change_account_button_text": "Change Account Session",
             "retry_button_text": "Retry",
             "change_account_notice": "Please send a new account session.",
+            "retry_now_hint": "Please try again.",
             "unknown_value": "Unknown",
             "success_result_title": "Activation Completed Successfully",
             "failed_result_title": "Activation Failed",
@@ -217,21 +244,43 @@ class ActivationBotApp:
             "result_message": "Message",
             "result_note": "Note",
             "result_api_details": "API Details",
+            "history_button_text": "Order History",
+            "user_history_title": "Your Order History",
+            "user_no_orders": "No orders have been recorded for you yet.",
             "admin_title": "Admin Panel",
             "admin_panel_body": "Bot: {bot_label}\nRegistered users: {user_count}\nRecorded activations: {order_count}\nNew user notifications: {notify_new_user}\nSuccessful activation notifications: {notify_activation_success}\nFailed activation notifications: {notify_activation_failed}",
             "admin_unauthorized": "This section is only available to the bot admin.",
+            "admin_super_admin_only": "This section is only available to the super admin.",
             "admin_history_button_text": "Activation History",
             "admin_users_button_text": "Users",
             "admin_search_orders_button_text": "Search Activations",
             "admin_search_users_button_text": "Search Users",
             "admin_clear_search_button_text": "Clear Search",
             "admin_notifications_button_text": "Manage Notifications",
+            "admin_runtime_settings_button_text": "Runtime Settings",
+            "admin_broadcast_button_text": "Broadcast",
             "admin_export_orders_button_text": "Activations Excel",
             "admin_export_users_button_text": "Users Excel",
             "admin_refresh_button_text": "Refresh",
             "admin_close_button_text": "Close Panel",
             "admin_notifications_title": "Notification Settings",
             "admin_notifications_body": "Use the buttons below to turn this bot's notifications on or off.",
+            "admin_runtime_settings_title": "Runtime Settings",
+            "admin_runtime_settings_body": "This section updates runtime settings without a restart.\n\nShared values: <code>support_username</code>, <code>guide_link</code>, <code>api_base_url</code>, <code>product_id</code>\nNumeric values: <code>session_window_seconds</code>, <code>session_max_messages</code>, <code>outstock_poll_seconds</code>, <code>outstock_timeout_seconds</code>\nText values: use <code>field.fa=...</code> or <code>field.en=...</code>\n\nExamples:\n<code>request_session_message.fa=Please send the session as text or file.</code>\n<code>support_username=@DexAshkan</code>\n\nNote: bot token and startup credentials still require a restart.",
+            "admin_runtime_edit_button_text": "Edit Setting",
+            "admin_runtime_reset_button_text": "Reset Override",
+            "admin_runtime_prompt_title": "Edit Setting",
+            "admin_runtime_prompt_body": "Send the new value as <code>key=value</code>.",
+            "admin_runtime_reset_prompt_title": "Reset Override",
+            "admin_runtime_reset_prompt_body": "Send the key to reset. For text values use <code>field.fa</code> or <code>field.en</code>.",
+            "admin_runtime_saved": "The setting was saved.",
+            "admin_runtime_reset_done": "The override was removed.",
+            "admin_runtime_invalid_key": "The sent key is not valid for runtime editing.",
+            "admin_runtime_invalid_value": "The sent value is not valid for this key.",
+            "admin_broadcast_title": "Broadcast Message",
+            "admin_broadcast_body": "Send the broadcast text. It will be delivered to all users of this bot.",
+            "admin_broadcast_started": "The broadcast is being sent.",
+            "admin_broadcast_done": "The broadcast was sent. Success: {sent_count} | Failed: {failed_count}",
             "admin_toggle_new_user": "New User Notifications",
             "admin_toggle_activation_success": "Successful Activation Notifications",
             "admin_toggle_activation_failed": "Failed Activation Notifications",
@@ -257,6 +306,7 @@ class ActivationBotApp:
             "admin_label_name": "Name",
             "admin_label_username": "Username",
             "admin_label_email": "Email",
+            "admin_label_product": "Product",
             "admin_label_activation_code": "Activation Code",
             "admin_label_time": "Time",
             "admin_label_status": "Status",
@@ -289,6 +339,50 @@ class ActivationBotApp:
             "admin_label_total_transactions": "Orders",
             "admin_label_last_transaction": "Last Transaction",
         },
+    }
+
+    RUNTIME_TEXT_FIELDS = (
+        "renew_button_text",
+        "support_button_text",
+        "confirm_button_text",
+        "cancel_button_text",
+        "usage_status_ready_text",
+        "usage_status_used_text",
+        "activation_checking_message",
+        "session_checking_message",
+        "welcome_message",
+        "support_message",
+        "support_hint_message",
+        "request_activation_code_message",
+        "activation_info_message",
+        "activation_invalid_message",
+        "activation_used_message",
+        "activation_check_error_message",
+        "request_session_message",
+        "session_invalid_message",
+        "subscription_warning_message",
+        "final_confirm_message",
+        "processing_order_message",
+        "order_submit_error_message",
+        "order_poll_error_message",
+        "order_result_message",
+        "order_timeout_message",
+        "cancelled_message",
+        "generic_error_message",
+        "in_progress_message",
+        "return_to_menu_message",
+    )
+    RUNTIME_VALUE_FIELDS = (
+        "support_username",
+        "guide_link",
+        "api_base_url",
+        "product_id",
+    )
+    RUNTIME_INT_FIELDS = {
+        "session_window_seconds": (1, 120),
+        "session_max_messages": (1, 20),
+        "outstock_poll_seconds": (1, 120),
+        "outstock_timeout_seconds": (10, 3600),
     }
 
     def __init__(self, settings: Settings, logger: logging.Logger) -> None:
@@ -345,24 +439,88 @@ class ActivationBotApp:
         normalized = self._normalize_language(language) or "fa"
         return self.UI_TEXTS[normalized][key]
 
+    def _runtime_storage_key(self, field_name: str, language: str | None = None) -> str:
+        if field_name in self.RUNTIME_TEXT_FIELDS:
+            normalized = self._normalize_language(language) or "fa"
+            return f"runtime.text.{field_name}.{normalized}"
+        if field_name in self.RUNTIME_VALUE_FIELDS:
+            return f"runtime.value.{field_name}"
+        if field_name in self.RUNTIME_INT_FIELDS:
+            return f"runtime.int.{field_name}"
+        raise KeyError(field_name)
+
+    def _runtime_text_value(self, field_name: str, language: str) -> str:
+        normalized = self._normalize_language(language) or "fa"
+        override = self.storage.get_setting(
+            self._runtime_storage_key(field_name, normalized)
+        )
+        if override is not None and override != "":
+            return override
+        return self.settings.get_text(field_name, normalized)
+
+    def _runtime_scalar_value(self, field_name: str) -> str:
+        override = self.storage.get_setting(self._runtime_storage_key(field_name))
+        if override is not None and override != "":
+            return override
+        return str(getattr(self.settings, field_name))
+
+    def _runtime_int_value(self, field_name: str) -> int:
+        override = self.storage.get_setting(self._runtime_storage_key(field_name))
+        if override is None or not str(override).strip():
+            return int(getattr(self.settings, field_name))
+        try:
+            value = int(str(override).strip())
+        except ValueError:
+            return int(getattr(self.settings, field_name))
+        minimum, maximum = self.RUNTIME_INT_FIELDS[field_name]
+        if value < minimum or value > maximum:
+            return int(getattr(self.settings, field_name))
+        return value
+
+    def _render_runtime_template(
+        self,
+        template: str,
+        *,
+        language: str,
+        **values: Any,
+    ) -> str:
+        support = html.escape(self._runtime_scalar_value("support_username"))
+        guide_link = html.escape(self._runtime_scalar_value("guide_link"))
+        support_hint_template = self._runtime_text_value("support_hint_message", language)
+        base_context = {
+            "support": support,
+            "guide_link": guide_link,
+        }
+        support_hint = support_hint_template.format(**base_context)
+        context = {
+            **base_context,
+            "support_hint": support_hint,
+        }
+        for key, value in values.items():
+            context[key] = "" if value is None else html.escape(str(value))
+        return template.format(**context)
+
     def _render_key(self, key: str, *, language: str, **values: Any) -> str:
-        return self.settings.render_key(key, language=language, **values)
+        template = self._runtime_text_value(key, language)
+        return self._render_runtime_template(template, language=language, **values)
 
     def _button_label(self, key: str, language: str) -> str:
         normalized = self._normalize_language(language) or "fa"
         emoji_map = {
             "renew": "✅",
+            "history": "📦",
             "support": "🧑‍💻",
             "language": "🌍",
             "cancel": "❌",
             "confirm": "✅",
         }
         text_map = {
-            "renew": self.settings.get_text("renew_button_text", normalized),
-            "support": self.settings.get_text("support_button_text", normalized),
+            "renew": self._runtime_text_value("renew_button_text", normalized),
+            "history": self._ui_text("history_button_text", normalized),
+            "support": self._runtime_text_value("support_button_text", normalized),
             "language": self._ui_text("language_button_text", normalized),
-            "cancel": self.settings.get_text("cancel_button_text", normalized),
-            "confirm": self.settings.get_text("confirm_button_text", normalized),
+            "cancel": self._runtime_text_value("cancel_button_text", normalized),
+            "confirm": self._runtime_text_value("confirm_button_text", normalized),
         }
         return f"{emoji_map[key]} {text_map[key]}"
 
@@ -406,8 +564,16 @@ class ActivationBotApp:
             )
         ]]
 
-    def _admin_panel_buttons(self, language: str) -> list[list[Any]]:
-        return [
+    def _retry_activation_buttons(self, language: str) -> list[list[Any]]:
+        return [[
+            Button.inline(
+                self._inline_label("retry", language),
+                data=b"retry_activation_check",
+            )
+        ]]
+
+    def _admin_panel_buttons(self, user_id: int, language: str) -> list[list[Any]]:
+        buttons = [
             [
                 Button.inline(
                     f"📋 {self._ui_text('admin_history_button_text', language)}",
@@ -434,6 +600,22 @@ class ActivationBotApp:
                     data=b"admin:notifications",
                 ),
             ],
+        ]
+        if self._is_super_admin_user(user_id):
+            buttons.append(
+                [
+                    Button.inline(
+                        f"⚙️ {self._ui_text('admin_runtime_settings_button_text', language)}",
+                        data=b"admin:runtime",
+                    ),
+                    Button.inline(
+                        f"📣 {self._ui_text('admin_broadcast_button_text', language)}",
+                        data=b"admin:broadcast",
+                    ),
+                ]
+            )
+        buttons.extend(
+            [
             [
                 Button.inline(
                     f"📊 {self._ui_text('admin_export_orders_button_text', language)}",
@@ -454,7 +636,9 @@ class ActivationBotApp:
                     data=b"admin:close",
                 ),
             ],
-        ]
+            ]
+        )
+        return buttons
 
     def _admin_search_state_name(self, view_kind: str) -> str:
         return f"waiting_admin_{view_kind}_search"
@@ -593,6 +777,36 @@ class ActivationBotApp:
             return None
         return {
             "view_kind": view_kind,
+            "page": page_value,
+            "per_page": per_page_value,
+            "filter_key": filter_key,
+            "sort_key": sort_key,
+        }
+
+    def _user_history_view_data(
+        self,
+        *,
+        page: int,
+        per_page: int,
+        filter_key: str,
+        sort_key: str,
+    ) -> bytes:
+        return f"userhistory:view:{page}:{per_page}:{filter_key}:{sort_key}".encode("utf-8")
+
+    def _parse_user_history_view_data(self, data: bytes) -> dict[str, Any] | None:
+        try:
+            decoded = data.decode("utf-8", errors="ignore")
+            _, action, page, per_page, filter_key, sort_key = decoded.split(":")
+        except ValueError:
+            return None
+        if action != "view":
+            return None
+        try:
+            page_value = max(1, int(page))
+            per_page_value = int(per_page)
+        except ValueError:
+            return None
+        return {
             "page": page_value,
             "per_page": per_page_value,
             "filter_key": filter_key,
@@ -873,6 +1087,82 @@ class ActivationBotApp:
             ],
         ]
 
+    def _user_history_buttons(
+        self,
+        *,
+        language: str,
+        page: int,
+        total_pages: int,
+        per_page: int,
+        filter_key: str,
+        sort_key: str,
+    ) -> list[list[Any]]:
+        prev_page = page - 1 if page > 1 else 1
+        next_page = page + 1 if page < total_pages else total_pages
+        page_label = self._ui_text("admin_page_label", language).format(
+            page=page,
+            total=total_pages,
+        )
+        return [
+            [
+                Button.inline(
+                    "⬅️",
+                    data=self._user_history_view_data(
+                        page=prev_page,
+                        per_page=per_page,
+                        filter_key=filter_key,
+                        sort_key=sort_key,
+                    ),
+                ),
+                Button.inline(page_label, data=b"admin:noop"),
+                Button.inline(
+                    "➡️",
+                    data=self._user_history_view_data(
+                        page=next_page,
+                        per_page=per_page,
+                        filter_key=filter_key,
+                        sort_key=sort_key,
+                    ),
+                ),
+            ],
+            [
+                Button.inline(
+                    self._selector_label(option == per_page, str(option)),
+                    data=self._user_history_view_data(
+                        page=1,
+                        per_page=option,
+                        filter_key=filter_key,
+                        sort_key=sort_key,
+                    ),
+                )
+                for option in self._history_per_page_options()
+            ],
+            [
+                Button.inline(
+                    self._selector_label(option_key == filter_key, option_label),
+                    data=self._user_history_view_data(
+                        page=1,
+                        per_page=per_page,
+                        filter_key=option_key,
+                        sort_key=sort_key,
+                    ),
+                )
+                for option_key, option_label in self._history_filter_options(language)
+            ],
+            [
+                Button.inline(
+                    self._selector_label(option_key == sort_key, option_label),
+                    data=self._user_history_view_data(
+                        page=1,
+                        per_page=per_page,
+                        filter_key=filter_key,
+                        sort_key=option_key,
+                    ),
+                )
+                for option_key, option_label in self._history_sort_options(language)
+            ],
+        ]
+
     def _normalize_username(self, value: str | None) -> str:
         raw = str(value or "").strip().lower()
         if raw.startswith("@"):
@@ -881,6 +1171,21 @@ class ActivationBotApp:
 
     def _is_admin_command(self, value: str) -> bool:
         return bool(ADMIN_COMMAND_PATTERN.fullmatch((value or "").strip()))
+
+    def _is_super_admin_identity(self, user_id: int, username: str | None) -> bool:
+        normalized_username = self._normalize_username(username)
+        super_admin_usernames = {
+            self._normalize_username(item)
+            for item in getattr(self.settings, "super_admin_usernames", ())
+            if self._normalize_username(item)
+        }
+        if normalized_username and normalized_username in super_admin_usernames:
+            return True
+        stored_user = self.storage.get_user(user_id)
+        if not stored_user:
+            return False
+        stored_username = self._normalize_username(stored_user.get("username"))
+        return bool(stored_username and stored_username in super_admin_usernames)
 
     def _is_admin_identity(self, user_id: int, username: str | None) -> bool:
         normalized_username = self._normalize_username(username)
@@ -907,6 +1212,132 @@ class ActivationBotApp:
         if user and int(user.get("is_admin") or 0) == 1:
             return True
         return self.storage.get_admin_chat_id() == user_id
+
+    def _is_super_admin_user(self, user_id: int) -> bool:
+        user = self.storage.get_user(user_id) or {}
+        return self._is_super_admin_identity(user_id, user.get("username"))
+
+    def _api_client(self) -> ReceiptApiClient:
+        return ReceiptApiClient(
+            self._runtime_scalar_value("api_base_url"),
+            self._runtime_scalar_value("product_id"),
+        )
+
+    def _is_retryable_api_error(self, error: ApiError) -> bool:
+        if error.status_code is None:
+            return True
+        if int(error.status_code) >= 500:
+            return True
+        haystack = str(error).strip().lower()
+        markers = (
+            "ارتباط با api برقرار نشد",
+            "service unavailable",
+            "temporarily unavailable",
+            "try again",
+            "timeout",
+            "timed out",
+            "bad gateway",
+            "gateway timeout",
+        )
+        return any(marker in haystack for marker in markers)
+
+    def _decode_uploaded_text(self, payload: Any) -> str:
+        if payload is None:
+            return ""
+        if isinstance(payload, str):
+            candidate_path = Path(payload)
+            if candidate_path.exists() and candidate_path.is_file():
+                try:
+                    payload = candidate_path.read_bytes()
+                except OSError:
+                    return payload
+            else:
+                return payload
+        if isinstance(payload, bytearray):
+            payload = bytes(payload)
+        if not isinstance(payload, bytes):
+            return str(payload)
+        for encoding in ("utf-8-sig", "utf-8", "utf-16", "utf-16-le", "utf-16-be"):
+            try:
+                return payload.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+        return payload.decode("latin-1", errors="ignore")
+
+    async def _extract_session_input(self, event: Any, fallback_text: str) -> str:
+        message = getattr(event, "message", None)
+        file_ref = getattr(message, "file", None)
+        if file_ref is None:
+            return fallback_text
+
+        downloaded: Any = None
+        if hasattr(message, "download_media"):
+            downloaded = await message.download_media(file=bytes)
+        elif hasattr(event, "download_media"):
+            downloaded = await event.download_media(file=bytes)
+        return self._decode_uploaded_text(downloaded) or fallback_text
+
+    def _parse_runtime_setting_input(
+        self,
+        raw_input: str,
+        *,
+        language: str,
+    ) -> tuple[str, str, str | None]:
+        text = str(raw_input or "").strip()
+        if "=" not in text:
+            raise ValueError(self._ui_text("admin_runtime_invalid_value", language))
+        key, value = text.split("=", 1)
+        normalized_key = key.strip()
+        normalized_value = value.strip()
+        if not normalized_key:
+            raise ValueError(self._ui_text("admin_runtime_invalid_key", language))
+
+        if "." in normalized_key:
+            base_key, suffix = normalized_key.rsplit(".", 1)
+            if base_key in self.RUNTIME_TEXT_FIELDS and suffix in {"fa", "en"}:
+                return base_key, normalized_value, suffix
+
+        if normalized_key in self.RUNTIME_TEXT_FIELDS:
+            return normalized_key, normalized_value, self._normalize_language(language) or "fa"
+        if normalized_key in self.RUNTIME_VALUE_FIELDS or normalized_key in self.RUNTIME_INT_FIELDS:
+            return normalized_key, normalized_value, None
+        raise ValueError(self._ui_text("admin_runtime_invalid_key", language))
+
+    def _save_runtime_override(
+        self,
+        field_name: str,
+        value: str,
+        *,
+        language: str,
+        language_suffix: str | None,
+    ) -> None:
+        if field_name in self.RUNTIME_INT_FIELDS:
+            try:
+                int_value = int(str(value).strip())
+            except ValueError as exc:
+                raise ValueError(self._ui_text("admin_runtime_invalid_value", language)) from exc
+            minimum, maximum = self.RUNTIME_INT_FIELDS[field_name]
+            if int_value < minimum or int_value > maximum:
+                raise ValueError(self._ui_text("admin_runtime_invalid_value", language))
+            self.storage.set_setting(
+                self._runtime_storage_key(field_name),
+                str(int_value),
+            )
+            return
+
+        setting_key = self._runtime_storage_key(field_name, language_suffix)
+        self.storage.set_setting(setting_key, str(value))
+
+    def _clear_runtime_override(
+        self,
+        field_name: str,
+        *,
+        language_suffix: str | None,
+    ) -> None:
+        self.storage.set_setting(
+            self._runtime_storage_key(field_name, language_suffix),
+            "",
+        )
 
     def _bot_label(self) -> str:
         return f"Bot {self.settings.bot_index}"
@@ -1074,7 +1505,7 @@ class ActivationBotApp:
         toggles = self.storage.get_notification_settings()
         return self._format_panel(
             self._ui_text("admin_title", language),
-            self.settings.render(
+            self._render_runtime_template(
                 self._ui_text("admin_panel_body", language),
                 language=language,
                 bot_label=self._bot_label(),
@@ -1171,9 +1602,11 @@ class ActivationBotApp:
             telegram_id = self._telegram_id_text(row.get("username"))
             email = row.get("email") or self._ui_text("unknown_value", language)
             code = row.get("activation_code") or self._ui_text("unknown_value", language)
+            product_name = row.get("product_name") or self._ui_text("unknown_value", language)
             chunks.append(
                 f"{emoji} #{row['id']} | {html.escape(telegram_id)} | {html.escape(display_name)}\n"
                 f"{html.escape(str(email))} | <code>{html.escape(str(code))}</code>\n"
+                f"{html.escape(self._ui_text('admin_label_product', language))}: {html.escape(str(product_name))}\n"
                 f"{html.escape(self._ui_text('admin_label_status', language))}: {html.escape(str(row.get('status') or '-'))} | "
                 f"{html.escape(self._ui_text('admin_label_time', language))}: {html.escape(self._format_timestamp(row.get('updated_at')))}"
             )
@@ -1297,6 +1730,94 @@ class ActivationBotApp:
             ),
         )
 
+    def _build_user_history_view(
+        self,
+        *,
+        user_id: int,
+        language: str,
+        page: int,
+        per_page: int,
+        status_filter: str,
+        sort_key: str,
+    ) -> tuple[str, list[list[Any]]]:
+        normalized_page, _ = self._page_slice(page, per_page)
+        total_items = self.storage.count_user_completed_orders_filtered(
+            user_id=user_id,
+            status_filter=status_filter,
+        )
+        total_pages = self._page_count(total_items, per_page)
+        page_value = min(normalized_page, total_pages)
+        offset = (page_value - 1) * per_page
+        rows = self.storage.query_user_completed_orders(
+            user_id=user_id,
+            limit=per_page,
+            offset=offset,
+            status_filter=status_filter,
+            sort_key=sort_key,
+        )
+        filter_label = self._option_label(
+            self._history_filter_options(language),
+            status_filter,
+            self._ui_text("admin_orders_filter_all", language),
+        )
+        sort_label = self._option_label(
+            self._history_sort_options(language),
+            sort_key,
+            self._ui_text("admin_orders_sort_newest", language),
+        )
+        summary_lines = [
+            f"<b>{html.escape(self._ui_text('admin_filter_label', language))}:</b> {html.escape(filter_label)}",
+            f"<b>{html.escape(self._ui_text('admin_sort_label', language))}:</b> {html.escape(sort_label)}",
+        ]
+        if not rows:
+            return (
+                self._format_panel(
+                    self._ui_text("user_history_title", language),
+                    "\n".join([*summary_lines, "", self._ui_text("user_no_orders", language)]),
+                    "📦",
+                ),
+                self._user_history_buttons(
+                    language=language,
+                    page=1,
+                    total_pages=1,
+                    per_page=per_page,
+                    filter_key=status_filter,
+                    sort_key=sort_key,
+                ),
+            )
+
+        chunks: list[str] = []
+        unknown_value = self._ui_text("unknown_value", language)
+        for row in rows:
+            emoji = "✅" if row["status"] == "success" else "❌"
+            chunks.append(
+                "\n".join(
+                    [
+                        f"{emoji} #{row['id']}",
+                        f"<b>{html.escape(self._ui_text('admin_label_product', language))}:</b> {html.escape(str(row.get('product_name') or unknown_value))}",
+                        f"<b>{html.escape(self._ui_text('result_email', language))}:</b> {html.escape(str(row.get('email') or unknown_value))}",
+                        f"<b>{html.escape(self._ui_text('result_activation_code', language))}:</b> <code>{html.escape(str(row.get('activation_code') or unknown_value))}</code>",
+                        f"<b>{html.escape(self._ui_text('result_activation_date', language))}:</b> {html.escape(self._format_timestamp(row.get('updated_at')))}",
+                        f"<b>{html.escape(self._ui_text('result_status', language))}:</b> {html.escape(str(row.get('status') or unknown_value))}",
+                    ]
+                )
+            )
+        return (
+            self._format_panel(
+                self._ui_text("user_history_title", language),
+                "\n".join(summary_lines) + "\n\n" + "\n\n".join(chunks),
+                "📦",
+            ),
+            self._user_history_buttons(
+                language=language,
+                page=page_value,
+                total_pages=total_pages,
+                per_page=per_page,
+                filter_key=status_filter,
+                sort_key=sort_key,
+            ),
+        )
+
     def _build_notification_settings_text(self, language: str) -> str:
         return self._format_panel(
             self._ui_text("admin_notifications_title", language),
@@ -1377,6 +1898,7 @@ class ActivationBotApp:
                 f"<b>{html.escape(self._ui_text('admin_label_telegram_id', admin_language))}:</b> {html.escape(username_text)}",
                 f"<b>{html.escape(self._ui_text('admin_label_name', admin_language))}:</b> {html.escape(display_name)}",
                 f"<b>{html.escape(self._ui_text('admin_label_email', admin_language))}:</b> {html.escape(str(order.get('email') or '-'))}",
+                f"<b>{html.escape(self._ui_text('admin_label_product', admin_language))}:</b> {html.escape(str(order.get('product_name') or '-'))}",
                 f"<b>{html.escape(self._ui_text('admin_label_activation_code', admin_language))}:</b> <code>{html.escape(str(order.get('activation_code') or '-'))}</code>",
                 f"<b>{html.escape(self._ui_text('admin_label_time', admin_language))}:</b> {html.escape(self._format_timestamp(order.get('updated_at')))}",
                 f"<b>{html.escape(self._ui_text('admin_label_status', admin_language))}:</b> {html.escape(str(order.get('status') or '-'))}",
@@ -1407,7 +1929,7 @@ class ActivationBotApp:
             await self._send_message(
                 user_id,
                 text,
-                buttons=self._admin_panel_buttons(language),
+                buttons=self._admin_panel_buttons(user_id, language),
                 sticker_kind="info",
             )
             return
@@ -1415,7 +1937,7 @@ class ActivationBotApp:
             user_id,
             responder,
             text,
-            buttons=self._admin_panel_buttons(language),
+            buttons=self._admin_panel_buttons(user_id, language),
             sticker_kind="info",
         )
 
@@ -1580,6 +2102,41 @@ class ActivationBotApp:
                 sort_key=sort_key,
                 search_query=search_query,
             )
+        await self._reply(
+            user_id,
+            responder,
+            text,
+            buttons=buttons,
+            sticker_kind="info",
+        )
+
+    async def send_user_history(
+        self,
+        user_id: int,
+        *,
+        responder: Any | None = None,
+        page: int = 1,
+        per_page: int = 20,
+        status_filter: str = "all",
+        sort_key: str = "newest",
+    ) -> None:
+        language = self._language_for_user(user_id)
+        text, buttons = self._build_user_history_view(
+            user_id=user_id,
+            language=language,
+            page=page,
+            per_page=per_page,
+            status_filter=status_filter,
+            sort_key=sort_key,
+        )
+        if responder is None:
+            await self._send_message(
+                user_id,
+                text,
+                buttons=buttons,
+                sticker_kind="info",
+            )
+            return
         await self._reply(
             user_id,
             responder,
@@ -1783,6 +2340,7 @@ class ActivationBotApp:
     def main_menu_buttons(self, language: str) -> list[list[Any]]:
         return [
             [Button.text(self._button_label("renew", language), resize=True)],
+            [Button.text(self._button_label("history", language), resize=True)],
             [Button.text(self._button_label("support", language), resize=True)],
             [Button.text(self._button_label("language", language), resize=True)],
         ]
@@ -2021,15 +2579,182 @@ class ActivationBotApp:
             search_query=search_query,
         )
 
+    async def handle_runtime_setting_input(self, event: Any) -> None:
+        user_id = event.sender_id
+        language = self._language_for_user(user_id)
+        try:
+            field_name, value, language_suffix = self._parse_runtime_setting_input(
+                event.raw_text or "",
+                language=language,
+            )
+            self._save_runtime_override(
+                field_name,
+                value,
+                language=language,
+                language_suffix=language_suffix,
+            )
+        except ValueError as exc:
+            await self._reply(
+                user_id,
+                event.respond,
+                self._format_panel(
+                    self._ui_text("error_title", language),
+                    str(exc),
+                    "⚠️",
+                ),
+                sticker_kind="warning",
+            )
+            return
+
+        self.storage.save_state(user_id, state="idle")
+        self.storage.log_event(
+            user_id=user_id,
+            event_type="runtime_setting_saved",
+            details={"input": event.raw_text or ""},
+        )
+        await self._reply(
+            user_id,
+            event.respond,
+            self._format_panel(
+                self._ui_text("admin_runtime_settings_title", language),
+                self._ui_text("admin_runtime_saved", language),
+                "✅",
+            ),
+            buttons=self._admin_panel_buttons(user_id, language),
+            sticker_kind="info",
+        )
+
+    async def handle_runtime_setting_reset_input(self, event: Any) -> None:
+        user_id = event.sender_id
+        language = self._language_for_user(user_id)
+        raw_key = (event.raw_text or "").strip()
+        language_suffix: str | None = None
+        field_name = raw_key
+        if "." in raw_key:
+            base_key, suffix = raw_key.rsplit(".", 1)
+            if base_key in self.RUNTIME_TEXT_FIELDS and suffix in {"fa", "en"}:
+                field_name = base_key
+                language_suffix = suffix
+        elif field_name in self.RUNTIME_TEXT_FIELDS:
+            language_suffix = language
+
+        if (
+            field_name not in self.RUNTIME_TEXT_FIELDS
+            and field_name not in self.RUNTIME_VALUE_FIELDS
+            and field_name not in self.RUNTIME_INT_FIELDS
+        ):
+            await self._reply(
+                user_id,
+                event.respond,
+                self._format_panel(
+                    self._ui_text("error_title", language),
+                    self._ui_text("admin_runtime_invalid_key", language),
+                    "⚠️",
+                ),
+                sticker_kind="warning",
+            )
+            return
+
+        self._clear_runtime_override(field_name, language_suffix=language_suffix)
+        self.storage.save_state(user_id, state="idle")
+        self.storage.log_event(
+            user_id=user_id,
+            event_type="runtime_setting_reset",
+            details={"key": raw_key},
+        )
+        await self._reply(
+            user_id,
+            event.respond,
+            self._format_panel(
+                self._ui_text("admin_runtime_settings_title", language),
+                self._ui_text("admin_runtime_reset_done", language),
+                "✅",
+            ),
+            buttons=self._admin_panel_buttons(user_id, language),
+            sticker_kind="info",
+        )
+
+    async def handle_broadcast_input(self, event: Any) -> None:
+        user_id = event.sender_id
+        language = self._language_for_user(user_id)
+        broadcast_text = (event.raw_text or "").strip()
+        if not broadcast_text:
+            await self._reply(
+                user_id,
+                event.respond,
+                self._format_panel(
+                    self._ui_text("error_title", language),
+                    self._ui_text("admin_broadcast_body", language),
+                    "⚠️",
+                ),
+                sticker_kind="warning",
+            )
+            return
+
+        self.storage.save_state(user_id, state="idle")
+        await self._reply(
+            user_id,
+            event.respond,
+            self._format_panel(
+                self._ui_text("admin_broadcast_title", language),
+                self._ui_text("admin_broadcast_started", language),
+                "📣",
+            ),
+            sticker_kind="info",
+        )
+
+        sent_count = 0
+        failed_count = 0
+        safe_broadcast_text = html.escape(broadcast_text)
+        for row in self.storage.list_all_users():
+            target_user_id = int(row.get("user_id") or 0)
+            if target_user_id <= 0:
+                continue
+            try:
+                await self._send_message(
+                    target_user_id,
+                    safe_broadcast_text,
+                    buttons=self.main_menu_buttons(self._language_for_user(target_user_id)),
+                    sticker_kind="info",
+                )
+                sent_count += 1
+            except Exception:
+                failed_count += 1
+
+        self.storage.log_event(
+            user_id=user_id,
+            event_type="broadcast_sent",
+            details={
+                "sent_count": sent_count,
+                "failed_count": failed_count,
+            },
+        )
+        await self._send_message(
+            user_id,
+            self._format_panel(
+                self._ui_text("admin_broadcast_title", language),
+                self._ui_text("admin_broadcast_done", language).format(
+                    sent_count=sent_count,
+                    failed_count=failed_count,
+                ),
+                "✅",
+            ),
+            buttons=self._admin_panel_buttons(user_id, language),
+            sticker_kind="info",
+        )
+
     async def handle_message(self, event: Any) -> None:
         raw_text = event.raw_text or ""
         text = raw_text.strip()
-        if not text or text == "/start":
-            return
-
         user_id = event.sender_id
         state = self.storage.get_state(user_id)
         language = self._language_from_state(state)
+        has_file = getattr(getattr(event, "message", None), "file", None) is not None
+
+        if text == "/start":
+            return
+        if not text and not (state["state"] == "waiting_session_fragments" and has_file):
+            return
 
         if self._is_admin_command(text):
             await self.handle_admin_command(user_id, responder=event.respond)
@@ -2041,6 +2766,18 @@ class ActivationBotApp:
 
         if state["state"] == self._admin_search_state_name("users") and self._is_admin_user(user_id):
             await self.handle_admin_search_input(event, "users")
+            return
+
+        if state["state"] == "waiting_admin_runtime_update" and self._is_super_admin_user(user_id):
+            await self.handle_runtime_setting_input(event)
+            return
+
+        if state["state"] == "waiting_admin_runtime_reset" and self._is_super_admin_user(user_id):
+            await self.handle_runtime_setting_reset_input(event)
+            return
+
+        if state["state"] == "waiting_admin_broadcast" and self._is_super_admin_user(user_id):
+            await self.handle_broadcast_input(event)
             return
 
         if text in self._button_variants("support"):
@@ -2123,12 +2860,30 @@ class ActivationBotApp:
                 await self.start_activation_flow(user_id, responder=event.respond)
             return
 
+        if text in self._button_variants("history"):
+            if state["state"] == "processing_order":
+                await self._reply(
+                    user_id,
+                    event.respond,
+                    self._format_panel(
+                        self._ui_text("order_in_progress_title", language),
+                        self._render_key("in_progress_message", language=language),
+                        "⏳",
+                    ),
+                    buttons=self.flow_menu_buttons(language),
+                    sticker_kind="processing",
+                )
+            else:
+                await self.send_user_history(user_id, responder=event.respond)
+            return
+
         if state["state"] == "waiting_activation_code":
             await self.handle_activation_code_input(event, raw_text)
             return
 
         if state["state"] == "waiting_session_fragments":
-            await self.handle_session_fragment(event, raw_text)
+            session_text = await self._extract_session_input(event, raw_text)
+            await self.handle_session_fragment(event, session_text)
             return
 
         if state["state"] == "processing_order":
@@ -2237,6 +2992,34 @@ class ActivationBotApp:
             await self.begin_order_processing(user_id)
             return
 
+        if data == b"retry_activation_check":
+            if state["state"] != "waiting_activation_code" or not str(state.get("activation_code") or "").strip():
+                await event.answer(self._ui_text("request_inactive", language), alert=True)
+                return
+            await event.answer(self._ui_text("retry_button_text", language))
+            await self._submit_activation_code_check(
+                user_id=user_id,
+                activation_code=str(state.get("activation_code") or ""),
+            )
+            return
+
+        if data.startswith(b"userhistory:view:"):
+            view_state = self._parse_user_history_view_data(data)
+            if not view_state:
+                await event.answer(self._ui_text("invalid_request", language), alert=True)
+                return
+            await event.answer()
+            text, buttons = self._build_user_history_view(
+                user_id=user_id,
+                language=language,
+                page=view_state["page"],
+                per_page=view_state["per_page"],
+                status_filter=view_state["filter_key"],
+                sort_key=view_state["sort_key"],
+            )
+            await event.edit(text, buttons=buttons, parse_mode="html", link_preview=False)
+            return
+
         await event.answer(self._ui_text("invalid_request", language), alert=True)
 
     async def handle_admin_callback(self, event: Any, data: bytes) -> None:
@@ -2257,7 +3040,7 @@ class ActivationBotApp:
             await self._edit_admin_message(
                 event,
                 self._build_admin_panel_text(language),
-                buttons=self._admin_panel_buttons(language),
+                buttons=self._admin_panel_buttons(user_id, language),
             )
             return
 
@@ -2326,6 +3109,106 @@ class ActivationBotApp:
                 event,
                 self._build_notification_settings_text(language),
                 buttons=self._notification_settings_buttons(language),
+            )
+            return
+
+        if data == b"admin:runtime":
+            if not self._is_super_admin_user(user_id):
+                await event.answer(self._ui_text("admin_super_admin_only", language), alert=True)
+                return
+            self.storage.save_state(user_id, state="idle")
+            await event.answer(self._ui_text("admin_runtime_settings_title", language))
+            await self._edit_admin_message(
+                event,
+                self._format_panel(
+                    self._ui_text("admin_runtime_settings_title", language),
+                    self._ui_text("admin_runtime_settings_body", language),
+                    "⚙️",
+                ),
+                buttons=[
+                    [
+                        Button.inline(
+                            f"✏️ {self._ui_text('admin_runtime_edit_button_text', language)}",
+                            data=b"admin:runtime_edit",
+                        ),
+                        Button.inline(
+                            f"🧹 {self._ui_text('admin_runtime_reset_button_text', language)}",
+                            data=b"admin:runtime_reset",
+                        ),
+                    ],
+                    [
+                        Button.inline(
+                            f"⬅️ {self._ui_text('admin_back_button_text', language)}",
+                            data=b"admin:panel",
+                        )
+                    ],
+                ],
+            )
+            return
+
+        if data == b"admin:runtime_edit":
+            if not self._is_super_admin_user(user_id):
+                await event.answer(self._ui_text("admin_super_admin_only", language), alert=True)
+                return
+            self.storage.save_state(user_id, state="waiting_admin_runtime_update")
+            await event.answer(self._ui_text("admin_runtime_prompt_title", language))
+            await self._edit_admin_message(
+                event,
+                self._format_panel(
+                    self._ui_text("admin_runtime_prompt_title", language),
+                    self._ui_text("admin_runtime_prompt_body", language),
+                    "✏️",
+                ),
+                buttons=[[
+                    Button.inline(
+                        f"⬅️ {self._ui_text('admin_back_button_text', language)}",
+                        data=b"admin:runtime",
+                    )
+                ]],
+            )
+            return
+
+        if data == b"admin:runtime_reset":
+            if not self._is_super_admin_user(user_id):
+                await event.answer(self._ui_text("admin_super_admin_only", language), alert=True)
+                return
+            self.storage.save_state(user_id, state="waiting_admin_runtime_reset")
+            await event.answer(self._ui_text("admin_runtime_reset_prompt_title", language))
+            await self._edit_admin_message(
+                event,
+                self._format_panel(
+                    self._ui_text("admin_runtime_reset_prompt_title", language),
+                    self._ui_text("admin_runtime_reset_prompt_body", language),
+                    "🧹",
+                ),
+                buttons=[[
+                    Button.inline(
+                        f"⬅️ {self._ui_text('admin_back_button_text', language)}",
+                        data=b"admin:runtime",
+                    )
+                ]],
+            )
+            return
+
+        if data == b"admin:broadcast":
+            if not self._is_super_admin_user(user_id):
+                await event.answer(self._ui_text("admin_super_admin_only", language), alert=True)
+                return
+            self.storage.save_state(user_id, state="waiting_admin_broadcast")
+            await event.answer(self._ui_text("admin_broadcast_title", language))
+            await self._edit_admin_message(
+                event,
+                self._format_panel(
+                    self._ui_text("admin_broadcast_title", language),
+                    self._ui_text("admin_broadcast_body", language),
+                    "📣",
+                ),
+                buttons=[[
+                    Button.inline(
+                        f"⬅️ {self._ui_text('admin_back_button_text', language)}",
+                        data=b"admin:panel",
+                    )
+                ]],
             )
             return
 
@@ -2597,44 +3480,29 @@ class ActivationBotApp:
             sticker_kind="info",
         )
 
-    async def handle_activation_code_input(self, event: Any, text: str) -> None:
-        user_id = event.sender_id
+    async def _submit_activation_code_check(
+        self,
+        *,
+        user_id: int,
+        activation_code: str,
+        responder: Any | None = None,
+    ) -> None:
         language = self._language_for_user(user_id)
-        activation_code = self._normalize_activation_code(text)
-        if not activation_code:
-            await self._reply(
-                user_id,
-                event.respond,
-                self._format_panel(
-                    self._ui_text("activation_invalid_title", language),
-                    self._render_key("activation_invalid_message", language=language),
-                    "⚠️",
-                ),
-                buttons=self.flow_menu_buttons(language),
-                sticker_kind="warning",
-            )
-            return
-
-        if not self._is_valid_activation_code(activation_code):
-            await self._reply(
-                user_id,
-                event.respond,
-                self._build_activation_code_format_message(language),
-                buttons=self.flow_menu_buttons(language),
-                sticker_kind="warning",
-            )
-            return
-
-        checking_message = await self._reply(
-            user_id,
-            event.respond,
-            self._format_panel(
-                self._ui_text("please_wait_title", language),
-                self._render_key("activation_checking_message", language=language),
-                "⏳",
-            ),
-            buttons=self.flow_menu_buttons(language),
+        self.storage.save_state(user_id, activation_code=activation_code)
+        checking_text = self._format_panel(
+            self._ui_text("please_wait_title", language),
+            self._render_key("activation_checking_message", language=language),
+            "⏳",
         )
+        if responder is None:
+            checking_message = await self._send_message(user_id, checking_text)
+        else:
+            checking_message = await self._reply(
+                user_id,
+                responder,
+                checking_text,
+                buttons=self.flow_menu_buttons(language),
+            )
 
         self.storage.log_event(
             user_id=user_id,
@@ -2647,8 +3515,12 @@ class ActivationBotApp:
             self._mask_value(activation_code, keep_start=8, keep_end=6),
         )
         try:
-            payload = await asyncio.to_thread(self.api.check_activation_code, activation_code)
+            payload = await asyncio.to_thread(
+                self._api_client().check_activation_code,
+                activation_code,
+            )
         except ApiError as exc:
+            retryable = self._is_retryable_api_error(exc)
             self.logger.warning(
                 "activation_check_failed user=%s path=%s status=%s request_id=%s body=%r",
                 self._log_user_identity(user_id),
@@ -2663,24 +3535,50 @@ class ActivationBotApp:
                 details={
                     "error": exc.to_dict(),
                     "activation_code": activation_code,
+                    "retryable": retryable,
                 },
             )
             await self._delete_message(user_id, checking_message)
-            await self._reply(
-                user_id,
-                event.respond,
-                self._format_panel(
-                    self._ui_text("activation_check_error_title", language),
-                    self._render_key(
-                        "activation_check_error_message",
-                        language=language,
-                        error=self._sanitize_api_text(str(exc)),
+            if retryable:
+                error_body = self._render_key(
+                    "activation_check_error_message",
+                    language=language,
+                    error=self._sanitize_api_text(str(exc)),
+                    support_hint=self._ui_text("retry_now_hint", language),
+                )
+            else:
+                error_body = self._render_key(
+                    "activation_check_error_message",
+                    language=language,
+                    error=self._sanitize_api_text(str(exc)),
+                )
+            if responder is None:
+                await self._send_message(
+                    user_id,
+                    self._format_panel(
+                        self._ui_text("activation_check_error_title", language),
+                        error_body,
+                        "⚠️",
                     ),
-                    "⚠️",
-                ),
-                buttons=self.flow_menu_buttons(language),
-                sticker_kind="warning",
-            )
+                    buttons=self._retry_activation_buttons(language)
+                    if retryable
+                    else self.flow_menu_buttons(language),
+                    sticker_kind="warning",
+                )
+            else:
+                await self._reply(
+                    user_id,
+                    responder,
+                    self._format_panel(
+                        self._ui_text("activation_check_error_title", language),
+                        error_body,
+                        "⚠️",
+                    ),
+                    buttons=self._retry_activation_buttons(language)
+                    if retryable
+                    else self.flow_menu_buttons(language),
+                    sticker_kind="warning",
+                )
             return
 
         if payload.get("used"):
@@ -2690,17 +3588,29 @@ class ActivationBotApp:
                 details=payload,
             )
             await self._delete_message(user_id, checking_message)
-            await self._reply(
-                user_id,
-                event.respond,
-                self._format_panel(
-                    self._ui_text("activation_used_title", language),
-                    self._render_key("activation_used_message", language=language),
-                    "⚠️",
-                ),
-                buttons=self.flow_menu_buttons(language),
-                sticker_kind="warning",
-            )
+            if responder is None:
+                await self._send_message(
+                    user_id,
+                    self._format_panel(
+                        self._ui_text("activation_used_title", language),
+                        self._render_key("activation_used_message", language=language),
+                        "⚠️",
+                    ),
+                    buttons=self.flow_menu_buttons(language),
+                    sticker_kind="warning",
+                )
+            else:
+                await self._reply(
+                    user_id,
+                    responder,
+                    self._format_panel(
+                        self._ui_text("activation_used_title", language),
+                        self._render_key("activation_used_message", language=language),
+                        "⚠️",
+                    ),
+                    buttons=self.flow_menu_buttons(language),
+                    sticker_kind="warning",
+                )
             return
 
         resolved_activation_code = self._resolve_activation_code(activation_code, payload)
@@ -2734,24 +3644,67 @@ class ActivationBotApp:
             self._mask_value(resolved_activation_code, keep_start=8, keep_end=6),
         )
         await self._delete_message(user_id, checking_message)
-        await self._reply(
-            user_id,
-            event.respond,
-            self._format_panel(
-                self._ui_text("activation_checked_title", language),
-                self._render_key(
-                    "activation_info_message",
-                    language=language,
-                    app_name=app_name,
-                    app_product_name=product_name,
-                    usage_status=self.settings.get_text("usage_status_ready_text", language),
-                ),
-                "✅",
+        result_text = self._format_panel(
+            self._ui_text("activation_checked_title", language),
+            self._render_key(
+                "activation_info_message",
+                language=language,
+                app_name=app_name,
+                app_product_name=product_name,
+                usage_status=self._runtime_text_value("usage_status_ready_text", language),
             ),
-            buttons=self.flow_menu_buttons(language),
-            sticker_kind="success",
+            "✅",
         )
+        if responder is None:
+            await self._send_message(
+                user_id,
+                result_text,
+                buttons=self.flow_menu_buttons(language),
+                sticker_kind="success",
+            )
+        else:
+            await self._reply(
+                user_id,
+                responder,
+                result_text,
+                buttons=self.flow_menu_buttons(language),
+                sticker_kind="success",
+            )
         await self.send_request_session_prompt(user_id)
+
+    async def handle_activation_code_input(self, event: Any, text: str) -> None:
+        user_id = event.sender_id
+        language = self._language_for_user(user_id)
+        activation_code = self._normalize_activation_code(text)
+        if not activation_code:
+            await self._reply(
+                user_id,
+                event.respond,
+                self._format_panel(
+                    self._ui_text("activation_invalid_title", language),
+                    self._render_key("activation_invalid_message", language=language),
+                    "⚠️",
+                ),
+                buttons=self.flow_menu_buttons(language),
+                sticker_kind="warning",
+            )
+            return
+
+        if not self._is_valid_activation_code(activation_code):
+            await self._reply(
+                user_id,
+                event.respond,
+                self._build_activation_code_format_message(language),
+                buttons=self.flow_menu_buttons(language),
+                sticker_kind="warning",
+            )
+            return
+
+        await self._submit_activation_code_check(
+            user_id=user_id,
+            activation_code=activation_code,
+            responder=event.respond,
+        )
 
     async def handle_session_fragment(self, event: Any, text: str) -> None:
         user_id = event.sender_id
@@ -2790,7 +3743,7 @@ class ActivationBotApp:
             if message_id is not None:
                 self.session_status_messages[user_id] = message_id
 
-        if len(fragments) >= self.settings.session_max_messages:
+        if len(fragments) >= self._runtime_int_value("session_max_messages"):
             self.cancel_session_task(user_id)
             await self.finalize_session_fragments(user_id)
             return
@@ -2802,7 +3755,7 @@ class ActivationBotApp:
 
     async def _finalize_session_after_window(self, user_id: int) -> None:
         try:
-            await asyncio.sleep(self.settings.session_window_seconds)
+            await asyncio.sleep(self._runtime_int_value("session_window_seconds"))
             await self.finalize_session_fragments(user_id)
         except asyncio.CancelledError:  # pragma: no cover - timing path
             return
@@ -2823,7 +3776,7 @@ class ActivationBotApp:
                 user_id,
                 self._format_panel(
                     self._ui_text("session_check_error_title", language),
-                    self.settings.render(
+                    self._render_runtime_template(
                         self._ui_text("session_check_unexpected", language),
                         language=language,
                     ),
@@ -2840,11 +3793,11 @@ class ActivationBotApp:
         if state["state"] != "waiting_session_fragments":
             return
 
-        raw_session = "".join(state["session_fragments"]).strip()
-        if not raw_session:
-            return
-
+        raw_session = ""
         try:
+            raw_session = combine_session_fragments(list(state["session_fragments"]))
+            if not raw_session:
+                return
             session_data = SessionData.parse(raw_session)
         except SessionValidationError as exc:
             await self._clear_session_status_message(user_id)
@@ -2905,7 +3858,7 @@ class ActivationBotApp:
                 user_id,
                 self._format_panel(
                     self._ui_text("session_check_error_title", language),
-                    self.settings.render(
+                    self._render_runtime_template(
                         self._ui_text("session_check_unexpected", language),
                         language=language,
                     ),
@@ -3082,7 +4035,7 @@ class ActivationBotApp:
                 self._mask_value(activation_code, keep_start=8, keep_end=6),
             )
             task_id = await asyncio.to_thread(
-                self.api.create_outstock_order,
+                self._api_client().create_outstock_order,
                 activation_code,
                 outstock_user,
             )
@@ -3110,11 +4063,11 @@ class ActivationBotApp:
             )
 
             loop = asyncio.get_running_loop()
-            deadline = loop.time() + self.settings.outstock_timeout_seconds
+            deadline = loop.time() + self._runtime_int_value("outstock_timeout_seconds")
             while loop.time() < deadline:
-                await asyncio.sleep(self.settings.outstock_poll_seconds)
+                await asyncio.sleep(self._runtime_int_value("outstock_poll_seconds"))
                 try:
-                    result = await asyncio.to_thread(self.api.get_outstock_status, task_id)
+                    result = await asyncio.to_thread(self._api_client().get_outstock_status, task_id)
                 except ApiError as exc:
                     self.storage.update_order(
                         order_id,

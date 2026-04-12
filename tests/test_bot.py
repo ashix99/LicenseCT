@@ -7,6 +7,8 @@ from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
+import requests
+
 from bot_app import ActivationBotApp
 from receipt_api import ReceiptApiClient
 from settings import Settings
@@ -14,6 +16,7 @@ from session_data import (
     SessionData,
     SessionValidationError,
     build_outstock_user_candidates,
+    combine_session_fragments,
     extract_outstock_user,
     utc_now,
 )
@@ -101,6 +104,21 @@ class SessionDataTests(unittest.TestCase):
         raw_session = self.to_json_text(payload)
         candidates = build_outstock_user_candidates(self.to_json_text(payload))
         self.assertEqual(candidates, [("raw_session", raw_session)])
+
+    def test_combine_session_fragments_reorders_out_of_order_parts(self):
+        raw_session = self.to_json_text(
+            self.build_payload(
+                accessToken="access-token-value",
+                sessionToken="session-cookie-value",
+            )
+        )
+        first = raw_session[:40]
+        middle = raw_session[40:120]
+        last = raw_session[120:]
+        combined = combine_session_fragments([middle, last, first])
+        self.assertEqual(combined, raw_session)
+        parsed = SessionData.parse(combined)
+        self.assertEqual(parsed.plan_type, "free")
 
 
 class StorageTests(unittest.TestCase):
@@ -294,6 +312,64 @@ class StorageTests(unittest.TestCase):
             if db_path.exists():
                 db_path.unlink()
 
+    def test_user_order_history_queries_are_scoped_to_the_user(self):
+        db_path = Path.cwd() / f"test_{uuid.uuid4().hex}.sqlite3"
+        try:
+            storage = BotStorage(db_path)
+            first_success = storage.create_order(
+                user_id=7,
+                activation_code="H1",
+                app_name="ChatGPT",
+                product_name="Plus 1M",
+                email="h1@example.com",
+                plan_type="free",
+                raw_session="{}",
+                status="success",
+            )
+            second_failed = storage.create_order(
+                user_id=7,
+                activation_code="H2",
+                app_name="ChatGPT",
+                product_name="Go 1M",
+                email="h2@example.com",
+                plan_type="free",
+                raw_session="{}",
+                status="failed",
+            )
+            storage.create_order(
+                user_id=9,
+                activation_code="OTHER",
+                app_name="ChatGPT",
+                product_name="Other",
+                email="other@example.com",
+                plan_type="free",
+                raw_session="{}",
+                status="success",
+            )
+            self.assertIsNotNone(first_success)
+            self.assertIsNotNone(second_failed)
+            self.assertEqual(
+                storage.count_user_completed_orders_filtered(user_id=7, status_filter="all"),
+                2,
+            )
+            self.assertEqual(
+                storage.count_user_completed_orders_filtered(user_id=7, status_filter="success"),
+                1,
+            )
+            rows = storage.query_user_completed_orders(
+                user_id=7,
+                limit=10,
+                offset=0,
+                status_filter="all",
+                sort_key="newest",
+            )
+            self.assertEqual(len(rows), 2)
+            self.assertEqual({row["activation_code"] for row in rows}, {"H1", "H2"})
+        finally:
+            storage.connection.close()
+            if db_path.exists():
+                db_path.unlink()
+
 
 class ApiClientTests(unittest.TestCase):
     @mock.patch("receipt_api.requests.request")
@@ -328,6 +404,24 @@ class ApiClientTests(unittest.TestCase):
         self.assertEqual(kwargs["json"]["cdk"], "ABC123")
         self.assertEqual(kwargs["json"]["user"], '{"ok": true}')
         self.assertEqual(task_id, "task-id-123")
+
+    @mock.patch("receipt_api.requests.request")
+    def test_check_activation_code_retries_temporary_failures(self, request_mock):
+        success_response = mock.Mock()
+        success_response.status_code = 200
+        success_response.headers = {"Content-Type": "application/json"}
+        success_response.json.return_value = {"used": False, "app_name": "ChatGPT"}
+        request_mock.side_effect = [
+            requests.RequestException("network down"),
+            requests.RequestException("still down"),
+            success_response,
+        ]
+
+        client = ReceiptApiClient("https://receipt-api.nitro.xin", "chatgpt")
+        payload = client.check_activation_code("ABC123")
+
+        self.assertEqual(request_mock.call_count, 3)
+        self.assertEqual(payload["used"], False)
 
 
 class SettingsTests(unittest.TestCase):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from itertools import permutations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -41,6 +42,118 @@ def build_outstock_user_candidates(raw_text: str) -> list[tuple[str, str]]:
 
 def extract_outstock_user(raw_text: str) -> str:
     return SessionData._normalize_text(raw_text)
+
+
+def combine_session_fragments(fragments: list[str]) -> str:
+    cleaned = [str(fragment or "").strip() for fragment in fragments if str(fragment or "").strip()]
+    if not cleaned:
+        raise SessionValidationError("سشن اکانت خالی است.")
+
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def add_candidate(parts: list[str] | tuple[str, ...]) -> None:
+        joined = "".join(parts).strip()
+        if joined and joined not in seen:
+            seen.add(joined)
+            candidates.append(joined)
+
+    add_candidate(cleaned)
+
+    heuristic_parts = _heuristic_fragment_order(cleaned)
+    add_candidate(heuristic_parts)
+
+    if len(cleaned) <= 4:
+        ordered_permutations = sorted(
+            permutations(cleaned),
+            key=_fragment_order_score,
+            reverse=True,
+        )
+        for permuted in ordered_permutations:
+            add_candidate(permuted)
+
+    for candidate in candidates:
+        if _looks_like_json_payload(candidate):
+            return candidate
+
+    for candidate in candidates:
+        if _looks_like_complete_json(candidate):
+            return candidate
+
+    return candidates[0]
+
+
+def _heuristic_fragment_order(fragments: list[str]) -> list[str]:
+    if len(fragments) <= 1:
+        return list(fragments)
+
+    first_index = next(
+        (index for index, fragment in enumerate(fragments) if fragment.lstrip().startswith(("{", "["))),
+        None,
+    )
+    last_index = next(
+        (
+            index
+            for index in range(len(fragments) - 1, -1, -1)
+            if fragments[index].rstrip().endswith(("}", "]"))
+        ),
+        None,
+    )
+
+    ordered: list[str] = []
+    used: set[int] = set()
+    if first_index is not None:
+        ordered.append(fragments[first_index])
+        used.add(first_index)
+
+    for index, fragment in enumerate(fragments):
+        if index in used:
+            continue
+        if last_index is not None and index == last_index:
+            continue
+        ordered.append(fragment)
+        used.add(index)
+
+    if last_index is not None and last_index not in used:
+        ordered.append(fragments[last_index])
+        used.add(last_index)
+
+    for index, fragment in enumerate(fragments):
+        if index not in used:
+            ordered.append(fragment)
+
+    return ordered
+
+
+def _looks_like_complete_json(value: str) -> bool:
+    stripped = str(value or "").strip()
+    return (
+        stripped.startswith("{")
+        and stripped.endswith("}")
+    ) or (
+        stripped.startswith("[")
+        and stripped.endswith("]")
+    )
+
+
+def _looks_like_json_payload(value: str) -> bool:
+    if not _looks_like_complete_json(value):
+        return False
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(payload, (dict, list))
+
+
+def _fragment_order_score(parts: tuple[str, ...]) -> tuple[int, int, int]:
+    if not parts:
+        return (0, 0, 0)
+    joined = "".join(parts).strip()
+    first_score = 1 if parts[0].lstrip().startswith(("{", "[")) else 0
+    last_score = 1 if parts[-1].rstrip().endswith(("}", "]")) else 0
+    json_score = 1 if _looks_like_json_payload(joined) else 0
+    return (json_score, first_score, last_score)
 
 
 def extract_email(payload: dict[str, Any]) -> str:

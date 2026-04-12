@@ -53,7 +53,7 @@ class Settings:
         "activation_invalid_message": "The activation code is invalid. Please check it and send it again.\n{support_hint}",
         "activation_used_message": "This activation code has already been used. Please send a valid activation code.\n{support_hint}",
         "activation_check_error_message": "An error occurred while checking the activation code.\n{error}\n{support_hint}",
-        "request_session_message": "Please send your account session.\nTo learn how to get the account session, open the link below:\n{guide_link}",
+        "request_session_message": "Please send your account session as a file or plain text.\nTo learn how to get the account session, open the link below:\n{guide_link}",
         "session_invalid_message": "Please send the session completely and correctly.\nTo learn how to get the account session, open the link below:\n{guide_link}\n{support_hint}",
         "subscription_warning_message": "This account already has an active subscription.\nIf a new product is activated on this account, the remaining days of the current subscription will be lost.\nDo you want to continue?",
         "final_confirm_message": "Email:\n{email}\nProduct:\n{product}\nDo you want to activate it?",
@@ -220,7 +220,7 @@ class Settings:
             ),
             "request_session_message": cls._env_str(
                 "REQUEST_SESSION_MESSAGE",
-                "لطفا سشن اکانت را بفرستید.\nبرای فهمیدن روش گرفتن سشن اکانت روی لینک زیر بزنید:\n{guide_link}",
+                "لطفا سشن اکانت را به صورت فایل یا متن عادی ارسال کنید.\nبرای فهمیدن روش گرفتن سشن اکانت روی لینک زیر بزنید:\n{guide_link}",
             ),
             "session_invalid_message": cls._env_str(
                 "SESSION_INVALID_MESSAGE",

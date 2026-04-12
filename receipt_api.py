@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import requests
@@ -46,20 +47,47 @@ class ReceiptApiClient:
         *,
         headers: dict[str, str] | None = None,
         json_body: dict[str, Any] | None = None,
+        max_attempts: int = 1,
+        retry_delay_seconds: float = 1.0,
     ) -> Any:
         url = f"{self.base_url}{path}"
-        try:
-            response = requests.request(
-                method=method,
-                url=url,
-                headers=headers,
-                json=json_body,
-                timeout=30,
-            )
-        except requests.RequestException as exc:
-            raise ApiError("ارتباط با API برقرار نشد.", path=path) from exc
+        attempts = max(1, int(max_attempts))
+        last_response: requests.Response | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                response = requests.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    json=json_body,
+                    timeout=30,
+                )
+            except requests.RequestException as exc:
+                if attempt < attempts:
+                    time.sleep(retry_delay_seconds)
+                    continue
+                raise ApiError("ارتباط با API برقرار نشد.", path=path) from exc
 
-        if response.status_code != 200:
+            last_response = response
+            if response.status_code == 200:
+                content_type = response.headers.get("Content-Type", "").lower()
+                if "application/json" in content_type:
+                    try:
+                        return response.json()
+                    except ValueError as exc:
+                        raise ApiError(
+                            "پاسخ JSON از API معتبر نبود.",
+                            request_id=response.headers.get("X-Request-Id"),
+                            response_body=response.text[:1000],
+                            response_headers=dict(response.headers),
+                            path=path,
+                        ) from exc
+                return response.text.strip()
+
+            if response.status_code >= 500 and attempt < attempts:
+                time.sleep(retry_delay_seconds)
+                continue
+
             error_text = response.text.strip() or f"HTTP {response.status_code}"
             raise ApiError(
                 error_text,
@@ -70,20 +98,17 @@ class ReceiptApiClient:
                 path=path,
             )
 
-        content_type = response.headers.get("Content-Type", "").lower()
-        if "application/json" in content_type:
-            try:
-                return response.json()
-            except ValueError as exc:
-                raise ApiError(
-                    "پاسخ JSON از API معتبر نبود.",
-                    request_id=response.headers.get("X-Request-Id"),
-                    response_body=response.text[:1000],
-                    response_headers=dict(response.headers),
-                    path=path,
-                ) from exc
-
-        return response.text.strip()
+        if last_response is not None:
+            error_text = last_response.text.strip() or f"HTTP {last_response.status_code}"
+            raise ApiError(
+                error_text,
+                status_code=last_response.status_code,
+                request_id=last_response.headers.get("X-Request-Id"),
+                response_body=last_response.text[:1000],
+                response_headers=dict(last_response.headers),
+                path=path,
+            )
+        raise ApiError("ارتباط با API برقرار نشد.", path=path)
 
     def check_activation_code(self, code: str) -> dict[str, Any]:
         payload = self._request(
@@ -94,6 +119,7 @@ class ReceiptApiClient:
                 "X-Product-ID": self.product_id,
             },
             json_body={"code": code},
+            max_attempts=3,
         )
         if not isinstance(payload, dict):
             raise ApiError("پاسخ بررسی کد فعالسازی قابل خواندن نبود.")

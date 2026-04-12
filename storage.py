@@ -581,6 +581,20 @@ class BotStorage:
         }
         return sort_map.get(sort_key, sort_map["newest"])
 
+    def _user_orders_where_clause(self, user_id: int, status_filter: str) -> tuple[str, list[Any]]:
+        where_parts = [
+            "orders.user_id = ?",
+            "orders.status != 'processing'",
+        ]
+        params: list[Any] = [user_id]
+        if status_filter == "success":
+            where_parts.append("orders.status = ?")
+            params.append("success")
+        elif status_filter == "failed":
+            where_parts.append("orders.status != ?")
+            params.append("success")
+        return " AND ".join(where_parts), params
+
     def list_all_completed_orders(self) -> list[dict[str, Any]]:
         with self.lock:
             rows = self.connection.execute(
@@ -677,6 +691,60 @@ class BotStorage:
         with self.lock:
             row = self.connection.execute(
                 "SELECT COUNT(*) AS count FROM orders WHERE status != 'processing'"
+            ).fetchone()
+        return int(row["count"] if row else 0)
+
+    def query_user_completed_orders(
+        self,
+        *,
+        user_id: int,
+        limit: int,
+        offset: int,
+        status_filter: str,
+        sort_key: str,
+    ) -> list[dict[str, Any]]:
+        where_clause, params = self._user_orders_where_clause(user_id, status_filter)
+        order_clause = self._orders_sort_clause(sort_key)
+        with self.lock:
+            rows = self.connection.execute(
+                f"""
+                SELECT
+                    orders.id,
+                    orders.user_id,
+                    orders.activation_code,
+                    orders.app_name,
+                    orders.product_name,
+                    orders.email,
+                    orders.plan_type,
+                    orders.task_id,
+                    orders.task_result,
+                    orders.status,
+                    orders.created_at,
+                    orders.updated_at
+                FROM orders
+                WHERE {where_clause}
+                ORDER BY {order_clause}
+                LIMIT ? OFFSET ?
+                """,
+                [*params, limit, offset],
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def count_user_completed_orders_filtered(
+        self,
+        *,
+        user_id: int,
+        status_filter: str,
+    ) -> int:
+        where_clause, params = self._user_orders_where_clause(user_id, status_filter)
+        with self.lock:
+            row = self.connection.execute(
+                f"""
+                SELECT COUNT(*) AS count
+                FROM orders
+                WHERE {where_clause}
+                """,
+                params,
             ).fetchone()
         return int(row["count"] if row else 0)
 
